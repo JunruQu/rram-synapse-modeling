@@ -27,6 +27,13 @@
 
 ## 验证与复现
 
+### Python 规范
+
+- 使用 Python 3.11+；按 Ruff 格式化，保持导入有序，不留未使用变量或导入。
+- 循环内定义的闭包须明确绑定所用循环变量；并行遍历等长序列时使用 `zip(..., strict=True)`。
+- 中文物理说明保留单位、公式来源与必要的全角标点；规则以 `pyproject.toml` 的 Ruff 配置为准。
+- 提交前运行 `uvx --from ruff==0.16.10 ruff check .`、`uvx --from ruff==0.16.10 ruff format --check .` 和 `uv run pytest`。
+
 ```bash
 uv sync --group dev
 uv run pytest

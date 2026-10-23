@@ -44,3 +44,4 @@ HiRes 用户确认的关键信息：
 当前完整基线：37 tests passed，18 subtests passed。HiRes-only 校准/导出已做临时目录烟雾检查；使用已存配置重放的预测保持不变。新增结果写入独立目录，避免覆盖接受的基线。
 
 环境采用 uv，Python >=3.11；`.venv` 已安装。沙箱有时不能写默认 uv 缓存，见 AGENTS.md 中的 `/tmp` 缓存命令。
+Python 文件现按 `pyproject.toml` 中的 Ruff 规则检查与格式化；提交前命令见 `AGENTS.md`。

@@ -39,10 +39,10 @@ DC 内核仅依赖标准库；新增瞬态求解使用 NumPy。数据、优化�
 端子的有效电容，保留原 DC 接口，详见 TransientOptions。
 """
 
-from dataclasses import dataclass, fields
 import math
 from collections.abc import Sequence
-
+from dataclasses import dataclass, fields
+from itertools import pairwise
 
 KB_EV = 8.617333262145e-5  # 玻尔兹曼常数，eV/K；所有热激活指数使用此单位。
 
@@ -224,6 +224,7 @@ class TransientOptions:
 
     所有脉冲均不限流；电流限幅是仪器/外部电路行为，不是本征脉冲模型。
     """
+
     thermal_time_s: float = 0.0
     pad_capacitance_f: float = 0.0
 
@@ -236,6 +237,7 @@ class TransientOptions:
 @dataclass(frozen=True)
 class TransientResult:
     """电流单位 A，温度 K，时间 s；导电和电容电流分别保留以核查边沿。"""
+
     time_s: list[float]
     points: list[OperatingPoint]
     states: list[State]
@@ -261,7 +263,11 @@ def hopping_density(voltage_v: float, gap_m: float, p: Parameters) -> float:
     u = abs(voltage_v) / p.hopping_voltage_v
     if u == 0:
         return 0.0
-    log_sinh = math.log(math.sinh(u)) if u < 20 else u - math.log(2) + math.log1p(-math.exp(-2*u))
+    log_sinh = (
+        math.log(math.sinh(u))
+        if u < 20
+        else u - math.log(2) + math.log1p(-math.exp(-2 * u))
+    )
     log_j = math.log(p.hopping_density_a_m2) - gap_m / p.hopping_length_m + log_sinh
     if log_j > 700:
         raise ModelError("hopping 电流超出浮点范围；请检查电压/参数单位")
@@ -284,7 +290,7 @@ def _bisect(fn, low: float, high: float, *, voltage_tol: float = 1e-11) -> float
         fm = fn(mid)
         if not math.isfinite(fm):
             raise ModelError("电路求解出现非有限残差")
-        if abs(fm) <= voltage_tol or high-low <= max(abs(mid)*1e-12, 1e-300):
+        if abs(fm) <= voltage_tol or high - low <= max(abs(mid) * 1e-12, 1e-300):
             return mid
         if (fl < 0) == (fm < 0):
             low, fl = mid, fm
@@ -302,8 +308,8 @@ def _geometry(s: State, p: Parameters):
     """
     a0 = math.pi * p.filament_max_m**2 / 4
     area = math.pi * s.w_m**2 / 4
-    factor = (p.thickness_m-s.x0_m)/a0 + (s.x0_m-s.x_m)/area
-    return factor, area, max(0.0, a0-area)
+    factor = (p.thickness_m - s.x0_m) / a0 + (s.x0_m - s.x_m) / area
+    return factor, area, max(0.0, a0 - area)
 
 
 def _gap_voltage(current_a: float, log_scale: float, p: Parameters) -> float:
@@ -313,13 +319,21 @@ def _gap_voltage(current_a: float, log_scale: float, p: Parameters) -> float:
     """
     if current_a == 0:
         return 0.0
-    log_ratio = math.log(abs(current_a))-log_scale
-    value = log_ratio+math.log(2) if log_ratio > 350 else math.asinh(math.exp(log_ratio))
-    return math.copysign(p.hopping_voltage_v*value, current_a)
+    log_ratio = math.log(abs(current_a)) - log_scale
+    value = (
+        log_ratio + math.log(2) if log_ratio > 350 else math.asinh(math.exp(log_ratio))
+    )
+    return math.copysign(p.hopping_voltage_v * value, current_a)
 
 
-def operating_point(voltage_v: float, state: State, params: Parameters | None = None,
-                    compliance_a: float | None = None, *, compliance_mode: str = "both") -> OperatingPoint:
+def operating_point(
+    voltage_v: float,
+    state: State,
+    params: Parameters | None = None,
+    compliance_a: float | None = None,
+    *,
+    compliance_mode: str = "both",
+) -> OperatingPoint:
     """固定几何下求电流、电压和自热，并可施加理想电流限幅。
 
     compliance_mode="both" 保持原有的正负对称限流；"set" 仅在 SET
@@ -340,69 +354,95 @@ def operating_point(voltage_v: float, state: State, params: Parameters | None = 
     state.validate(p)
     if not math.isfinite(voltage_v):
         raise ValueError("电压必须有限")
-    if compliance_a is not None and (not math.isfinite(compliance_a) or compliance_a <= 0):
+    if compliance_a is not None and (
+        not math.isfinite(compliance_a) or compliance_a <= 0
+    ):
         raise ValueError("compliance_a 必须为有限正数")
     if compliance_mode not in ("both", "set"):
         raise ValueError("compliance_mode 必须为 both 或 set")
     # SET 极性由器件接线约定决定；即使同一条回线也不可误裁剪 RESET 电流。
     # 在 SET 极性返回扫描时仍保持仪器限流，零偏压不需要限流。
-    if compliance_mode == "set" and p.set_polarity*voltage_v <= 0:
+    if compliance_mode == "set" and p.set_polarity * voltage_v <= 0:
         compliance_a = None
     if voltage_v == 0:
         return OperatingPoint(0, 0, 0, 0, 0, 0, p.ambient_k, False)
     sign = math.copysign(1, voltage_v)
     target = abs(voltage_v)
     metal_factor, area, background_area = _geometry(state, p)
-    leak = 0.0 if p.parallel_ohm is None else 1/p.parallel_ohm
-    log_scale = math.log(area*p.hopping_density_a_m2)-state.x_m/p.hopping_length_m
+    leak = 0.0 if p.parallel_ohm is None else 1 / p.parallel_ohm
+    log_scale = math.log(area * p.hopping_density_a_m2) - state.x_m / p.hopping_length_m
 
     def background(u):
-        return background_area*hopping_density(u, state.x0_m, p) if background_area else 0.0
+        return (
+            background_area * hopping_density(u, state.x0_m, p)
+            if background_area
+            else 0.0
+        )
 
     def quantities(j, u):
-        temperature = p.ambient_k + j*u*p.thermal_k_w
-        main = j-background(u)
+        temperature = p.ambient_k + j * u * p.thermal_k_w
+        main = j - background(u)
         # 亚原子间隙的连续接触插值：避免 x=0 到 x>0 的有限电阻跳变。
         # 该插值只作用于 x<a，必须与完整 hopping 式的适用区区分。
-        gap = min(1.0, state.x_m/p.atomic_step_m)*_gap_voltage(main, log_scale, p) if state.x_m > 0 else 0.0
-        residual = main*metal_factor/conductivity(temperature, p)+gap-u
+        gap = (
+            min(1.0, state.x_m / p.atomic_step_m) * _gap_voltage(main, log_scale, p)
+            if state.x_m > 0
+            else 0.0
+        )
+        residual = main * metal_factor / conductivity(temperature, p) + gap - u
         return residual, temperature, gap
 
     def residual(j):
-        u = max(0.0, (target-p.series_ohm*j)/(1+p.series_ohm*leak))
+        u = max(0.0, (target - p.series_ohm * j) / (1 + p.series_ohm * leak))
         return quantities(j, u)[0]
 
     # 使用冷态金属上界；全绝缘厚度且 metal_factor=0 时用 hopping 直接上界。
     if p.series_ohm:
-        upper = target/p.series_ohm
+        upper = target / p.series_ohm
     elif metal_factor > 0:
-        upper = target*conductivity(p.ambient_k, p)/metal_factor+background(target)
+        upper = target * conductivity(p.ambient_k, p) / metal_factor + background(
+            target
+        )
     else:
-        upper = area*hopping_density(target, state.x_m, p)+background(target)
+        upper = area * hopping_density(target, state.x_m, p) + background(target)
     j = _bisect(residual, 0.0, upper)
-    u = max(0.0, (target-p.series_ohm*j)/(1+p.series_ohm*leak))
-    total = j+u*leak
+    u = max(0.0, (target - p.series_ohm * j) / (1 + p.series_ohm * leak))
+    total = j + u * leak
     limited = compliance_a is not None and total > compliance_a
     if limited:
+
         def limited_residual(v):
-            return quantities(max(0.0, compliance_a-v*leak), v)[0]
+            return quantities(max(0.0, compliance_a - v * leak), v)[0]
+
         # 非负开关支路电流要求 U<=Icc*Rp。
-        upper_u = min(u, compliance_a/leak) if leak else u
+        upper_u = min(u, compliance_a / leak) if leak else u
         u = _bisect(limited_residual, 0.0, upper_u)
         total = compliance_a
-        j = max(0.0, total-u*leak)
+        j = max(0.0, total - u * leak)
     _, temperature, gap = quantities(j, u)
     if temperature > p.temperature_limit_k:
         raise ModelError(f"局部温度 {temperature:.1f} K 超过模型保护上限")
     if gap < -1e-8:
         raise ModelError("得到不符合无源导电假设的间隙压降")
-    terminal = u+p.series_ohm*total
-    return OperatingPoint(voltage_v, sign*terminal, sign*u, sign*total,
-                          sign*j, sign*max(0.0, gap), temperature, bool(limited))
+    terminal = u + p.series_ohm * total
+    return OperatingPoint(
+        voltage_v,
+        sign * terminal,
+        sign * u,
+        sign * total,
+        sign * j,
+        sign * max(0.0, gap),
+        temperature,
+        bool(limited),
+    )
 
 
-def switching_rates(voltage_v: float, state: State, params: Parameters | None = None,
-                    point: OperatingPoint | None = None) -> Rates:
+def switching_rates(
+    voltage_v: float,
+    state: State,
+    params: Parameters | None = None,
+    point: OperatingPoint | None = None,
+) -> Rates:
     """式 (11)--(13)、(15)、(18)：连续的、场/温度辅助的几何演化速率。
 
     RESET（取正的速率大小，再令 dx/dt>0）：
@@ -422,38 +462,79 @@ def switching_rates(voltage_v: float, state: State, params: Parameters | None = 
     p = params or Parameters()
     state.validate(p)
     op = point or operating_point(voltage_v, state, p)
-    v = p.set_polarity*op.internal_v
+    v = p.set_polarity * op.internal_v
     if v == 0:
         return Rates(0, 0, 0, 0, 0, "zero_bias")
-    kt = KB_EV*op.temperature_k
+    kt = KB_EV * op.temperature_k
     # x<a 时 gap_v 已乘 x/a，因此 gap_v/x 在 x->0 时仍有限；不能再将
     # 分母换成 a，否则会重复缩小场，使 RESET 的微小间隙无法长大。
-    field = abs(op.gap_v)/state.x_m if state.x_m > 0 else abs(op.internal_v)/max(state.x0_m, p.atomic_step_m)
+    field = (
+        abs(op.gap_v) / state.x_m
+        if state.x_m > 0
+        else abs(op.internal_v) / max(state.x0_m, p.atomic_step_m)
+    )
     # 无场近闭合 RESET 使用原子尺度下的内部电压，启动首个断裂步骤。
     if state.x_m == 0:
-        field = abs(op.internal_v)/p.atomic_step_m if v < 0 else field
-    log_h = p.hopping_alpha_m*p.charge_number*field/kt
-    log_sinh = math.log(math.sinh(log_h)) if 0 < log_h < 20 else (log_h-math.log(2) if log_h else -math.inf)
-    hop = p.atomic_step_m*p.attempt_hz*math.exp(min(0.0, -p.hopping_ev/kt+log_sinh))
-    release = p.atomic_step_m*p.attempt_hz*math.exp(min(0.0, -(p.release_ev-p.release_gamma*p.charge_number*abs(op.internal_v))/kt))
-    recombine = p.atomic_step_m*p.attempt_hz*math.exp(-p.recombination_ev/kt)
+        field = abs(op.internal_v) / p.atomic_step_m if v < 0 else field
+    log_h = p.hopping_alpha_m * p.charge_number * field / kt
+    log_sinh = (
+        math.log(math.sinh(log_h))
+        if 0 < log_h < 20
+        else (log_h - math.log(2) if log_h else -math.inf)
+    )
+    hop = (
+        p.atomic_step_m
+        * p.attempt_hz
+        * math.exp(min(0.0, -p.hopping_ev / kt + log_sinh))
+    )
+    release = (
+        p.atomic_step_m
+        * p.attempt_hz
+        * math.exp(
+            min(
+                0.0,
+                -(p.release_ev - p.release_gamma * p.charge_number * abs(op.internal_v))
+                / kt,
+            )
+        )
+    )
+    recombine = p.atomic_step_m * p.attempt_hz * math.exp(-p.recombination_ev / kt)
     if v < 0:
         candidates = {"hopping": hop, "release": release, "recombination": recombine}
         limiting = min(candidates, key=candidates.get)
         dx = candidates[limiting] if state.x_m < p.thickness_m else 0.0
         return Rates(dx, 0, hop, release, recombine, limiting)
-    activation = p.attempt_hz*math.exp(min(0.0, -(p.generation_ev-p.generation_alpha_m*p.charge_number*field)/kt))
+    activation = p.attempt_hz * math.exp(
+        min(
+            0.0,
+            -(p.generation_ev - p.generation_alpha_m * p.charge_number * field) / kt,
+        )
+    )
     if state.x_m > 0:
-        return Rates(-p.atomic_step_m*activation, 0, hop, release, recombine, "set_gap")
-    dw = (p.radial_shell_m+p.radial_shell_m**2/(2*state.w_m))*activation if state.w_m < p.filament_max_m else 0.0
+        return Rates(
+            -p.atomic_step_m * activation, 0, hop, release, recombine, "set_gap"
+        )
+    dw = (
+        (p.radial_shell_m + p.radial_shell_m**2 / (2 * state.w_m)) * activation
+        if state.w_m < p.filament_max_m
+        else 0.0
+    )
     return Rates(0, dw, hop, release, recombine, "set_width")
 
 
-def simulate_dc(time_s: Sequence[float], voltage_v: Sequence[float],
-                initial_state: State | None = None, params: Parameters | None = None,
-                *, compliance_a: float | None = None, rtol: float = 1e-3,
-                atol_m: float = 1e-13, max_step_s: float | None = None,
-                max_steps: int = 200000, compliance_mode: str = "both") -> SimulationResult:
+def simulate_dc(
+    time_s: Sequence[float],
+    voltage_v: Sequence[float],
+    initial_state: State | None = None,
+    params: Parameters | None = None,
+    *,
+    compliance_a: float | None = None,
+    rtol: float = 1e-3,
+    atol_m: float = 1e-13,
+    max_step_s: float | None = None,
+    max_steps: int = 200000,
+    compliance_mode: str = "both",
+) -> SimulationResult:
     """按采样顺序积分 DC 扫描，采样点之间的施加电压做线性插值。
 
     时间必须严格递增；绝不按电压排序，否则往返扫描的历史会被破坏。
@@ -473,9 +554,16 @@ def simulate_dc(time_s: Sequence[float], voltage_v: Sequence[float],
     ts, vs = [float(t) for t in time_s], [float(v) for v in voltage_v]
     if len(ts) != len(vs) or not ts:
         raise ValueError("时间/电压必须等长且非空")
-    if not all(math.isfinite(v) for v in ts+vs) or any(b <= a for a, b in zip(ts, ts[1:])):
+    if not all(math.isfinite(v) for v in ts + vs) or any(
+        b <= a for a, b in pairwise(ts)
+    ):
         raise ValueError("时间/电压须有限，时间须严格递增")
-    if not math.isfinite(rtol) or rtol <= 0 or not math.isfinite(atol_m) or not 0 < atol_m < p.atomic_step_m:
+    if (
+        not math.isfinite(rtol)
+        or rtol <= 0
+        or not math.isfinite(atol_m)
+        or not 0 < atol_m < p.atomic_step_m
+    ):
         raise ValueError("rtol 必须为正，atol_m 必须为小于原子步长的正数")
     if max_step_s is not None and (not math.isfinite(max_step_s) or max_step_s <= 0):
         raise ValueError("max_step_s 必须为有限正数")
@@ -494,62 +582,84 @@ def simulate_dc(time_s: Sequence[float], voltage_v: Sequence[float],
         point = operating_point(v, s, p, compliance_a, compliance_mode=compliance_mode)
         return switching_rates(v, s, p, point)
 
-    points = [operating_point(vs[0], state, p, compliance_a, compliance_mode=compliance_mode)]
+    points = [
+        operating_point(vs[0], state, p, compliance_a, compliance_mode=compliance_mode)
+    ]
     states = [state]
     accepted = attempts = 0
     next_h = math.inf
     for index in range(1, len(ts)):
-        start, end = ts[index-1], ts[index]
-        duration = end-start
+        start, end = ts[index - 1], ts[index]
+        duration = end - start
         t = 0.0
 
-        def voltage(local_t):
-            return vs[index-1]+(vs[index]-vs[index-1])*(local_t/duration)
+        def voltage(local_t, index=index, duration=duration):
+            return vs[index - 1] + (vs[index] - vs[index - 1]) * (local_t / duration)
 
         # 将零偏压交点作为分段边界，避免跨过极性变化而混合不同状态机制。
         boundaries = [duration]
-        if vs[index-1]*vs[index] < 0:
-            boundaries.insert(0, duration*(-vs[index-1])/(vs[index]-vs[index-1]))
+        if vs[index - 1] * vs[index] < 0:
+            boundaries.insert(
+                0, duration * (-vs[index - 1]) / (vs[index] - vs[index - 1])
+            )
         for boundary in boundaries:
             while t < boundary:
                 attempts += 1
                 if attempts > max_steps:
                     raise ModelError("状态积分超过 max_steps；检查时间尺度、参数或容差")
-                remaining = boundary-t
-                h = min(remaining, duration/8, next_h, max_step_s or math.inf)
+                remaining = boundary - t
+                h = min(remaining, duration / 8, next_h, max_step_s or math.inf)
                 v0 = voltage(t)
                 r0 = derivative(v0, state)
                 # 限制几何增量，防止在一个时间步内掠过窄的开关区。
                 speed = max(abs(r0.dx_m_s), abs(r0.dw_m_s))
                 if speed:
-                    h = min(h, 0.1*p.atomic_step_m/speed)
-                if h <= 0 or t+h == t:
+                    h = min(h, 0.1 * p.atomic_step_m / speed)
+                if h <= 0 or t + h == t:
                     raise ModelError("积分步长低于浮点分辨率")
-                euler = project(state.x_m+h*r0.dx_m_s, state.w_m+h*r0.dw_m_s, state)
-                r1 = derivative(voltage(t+h), euler)
+                euler = project(
+                    state.x_m + h * r0.dx_m_s, state.w_m + h * r0.dw_m_s, state
+                )
+                r1 = derivative(voltage(t + h), euler)
                 # 闭合事件的步内不混入下一阶段扩径；下一步会从新阶段重新计算。
-                dx1 = r1.dx_m_s if (r0.bottleneck == r1.bottleneck or r0.dx_m_s*r1.dx_m_s >= 0) else 0.0
+                dx1 = (
+                    r1.dx_m_s
+                    if (r0.bottleneck == r1.bottleneck or r0.dx_m_s * r1.dx_m_s >= 0)
+                    else 0.0
+                )
                 dw1 = r1.dw_m_s if state.x_m == 0 else 0.0
-                corrected = project(state.x_m+0.5*h*(r0.dx_m_s+dx1),
-                                    state.w_m+0.5*h*(r0.dw_m_s+dw1), state)
-                scale_x = atol_m+rtol*max(abs(state.x_m), abs(corrected.x_m))
-                scale_w = atol_m+rtol*max(abs(state.w_m), abs(corrected.w_m))
-                error = max(abs(corrected.x_m-euler.x_m)/scale_x,
-                            abs(corrected.w_m-euler.w_m)/scale_w)
+                corrected = project(
+                    state.x_m + 0.5 * h * (r0.dx_m_s + dx1),
+                    state.w_m + 0.5 * h * (r0.dw_m_s + dw1),
+                    state,
+                )
+                scale_x = atol_m + rtol * max(abs(state.x_m), abs(corrected.x_m))
+                scale_w = atol_m + rtol * max(abs(state.w_m), abs(corrected.w_m))
+                error = max(
+                    abs(corrected.x_m - euler.x_m) / scale_x,
+                    abs(corrected.w_m - euler.w_m) / scale_w,
+                )
                 if error <= 1:
                     state = corrected
-                    t = min(boundary, t+h)
-                    if boundary-t <= max(duration*1e-14, math.ulp(boundary)):
+                    t = min(boundary, t + h)
+                    if boundary - t <= max(duration * 1e-14, math.ulp(boundary)):
                         t = boundary
                     accepted += 1
-                next_h = h*(2 if error == 0 else min(2.0, max(0.1, 0.85/math.sqrt(error))))
+                next_h = h * (
+                    2 if error == 0 else min(2.0, max(0.1, 0.85 / math.sqrt(error)))
+                )
         states.append(state)
-        points.append(operating_point(vs[index], state, p, compliance_a, compliance_mode=compliance_mode))
+        points.append(
+            operating_point(
+                vs[index], state, p, compliance_a, compliance_mode=compliance_mode
+            )
+        )
     return SimulationResult(ts, points, states, accepted)
 
 
-def _fixed_temperature_point(voltage_v: float, state: State, p: Parameters,
-                             temperature_k: float) -> OperatingPoint:
+def _fixed_temperature_point(
+    voltage_v: float, state: State, p: Parameters, temperature_k: float
+) -> OperatingPoint:
     """给定温度的瞬时电子传导，与 DC 电路拓扑相同，供热 ODE 内部调用。
 
     将原 operating_point 中温度固定，以带括区间的 Newton 法解主电流。
@@ -562,64 +672,100 @@ def _fixed_temperature_point(voltage_v: float, state: State, p: Parameters,
     sign = math.copysign(1.0, voltage_v)
     target = abs(voltage_v)
     factor, area, bg_area = _geometry(state, p)
-    resistance = factor/conductivity(temperature_k, p)
-    leak = 0 if p.parallel_ohm is None else 1/p.parallel_ohm
-    scale = area*p.hopping_density_a_m2*math.exp(-state.x_m/p.hopping_length_m)
-    bg_scale = bg_area*p.hopping_density_a_m2*math.exp(-state.x0_m/p.hopping_length_m)
-    vt = p.hopping_voltage_v*min(1.0, state.x_m/p.atomic_step_m)
-    divider = 1+p.series_ohm*leak
-    du = -p.series_ohm/divider
+    resistance = factor / conductivity(temperature_k, p)
+    leak = 0 if p.parallel_ohm is None else 1 / p.parallel_ohm
+    scale = area * p.hopping_density_a_m2 * math.exp(-state.x_m / p.hopping_length_m)
+    bg_scale = (
+        bg_area * p.hopping_density_a_m2 * math.exp(-state.x0_m / p.hopping_length_m)
+    )
+    vt = p.hopping_voltage_v * min(1.0, state.x_m / p.atomic_step_m)
+    divider = 1 + p.series_ohm * leak
+    du = -p.series_ohm / divider
     if p.series_ohm:
-        upper = target/p.series_ohm
+        upper = target / p.series_ohm
     elif resistance:
-        upper = target/resistance+bg_scale*math.sinh(target/p.hopping_voltage_v)
+        upper = target / resistance + bg_scale * math.sinh(target / p.hopping_voltage_v)
     else:
-        upper = scale*math.sinh(target/vt)+bg_scale*math.sinh(target/p.hopping_voltage_v)
-    g = 1/(resistance+vt/max(scale, 1e-300)) if resistance+vt/max(scale, 1e-300) else 1e300
-    g += bg_scale/p.hopping_voltage_v
-    j = min(upper, target*g/(1+p.series_ohm*(g+leak)))
+        upper = scale * math.sinh(target / vt) + bg_scale * math.sinh(
+            target / p.hopping_voltage_v
+        )
+    g = (
+        1 / (resistance + vt / max(scale, 1e-300))
+        if resistance + vt / max(scale, 1e-300)
+        else 1e300
+    )
+    g += bg_scale / p.hopping_voltage_v
+    j = min(upper, target * g / (1 + p.series_ohm * (g + leak)))
     lower = 0.0
     for _ in range(70):
-        u = max(0.0, (target-p.series_ohm*j)/divider)
-        z = u/p.hopping_voltage_v
-        bg = bg_scale*math.sinh(z)
-        main = j-bg
-        gap = vt*math.asinh(main/max(scale, 1e-300)) if vt else 0.0
-        residual = resistance*main+gap-u
+        u = max(0.0, (target - p.series_ohm * j) / divider)
+        z = u / p.hopping_voltage_v
+        bg = bg_scale * math.sinh(z)
+        main = j - bg
+        gap = vt * math.asinh(main / max(scale, 1e-300)) if vt else 0.0
+        residual = resistance * main + gap - u
         # 在极小间隙、极低电流时，电流括区间可能先达到浮点相对精度，
         # 此时继续要求电压残差绝对小于 1e-10 会产生虚假的“不收敛”。
         # 与 DC 二分求根相同，同时允许电流区间的相对收敛。
-        if abs(residual) < 1e-10 or upper-lower <= max(abs(j)*1e-12, 1e-30):
-            total = j+u*leak
-            return OperatingPoint(voltage_v, voltage_v, sign*u, sign*total,
-                                  sign*j, sign*max(0.0, gap), temperature_k, False)
+        if abs(residual) < 1e-10 or upper - lower <= max(abs(j) * 1e-12, 1e-30):
+            total = j + u * leak
+            return OperatingPoint(
+                voltage_v,
+                voltage_v,
+                sign * u,
+                sign * total,
+                sign * j,
+                sign * max(0.0, gap),
+                temperature_k,
+                False,
+            )
         if residual < 0:
             lower = j
         else:
             upper = j
-        derivative = (resistance+vt/math.hypot(main, max(scale, 1e-300)))*(1-bg_scale*math.cosh(z)/p.hopping_voltage_v*du)-du
-        candidate = j-residual/derivative if derivative > 0 else math.inf
-        j = candidate if lower < candidate < upper else (lower+upper)/2
+        derivative = (resistance + vt / math.hypot(main, max(scale, 1e-300))) * (
+            1 - bg_scale * math.cosh(z) / p.hopping_voltage_v * du
+        ) - du
+        candidate = j - residual / derivative if derivative > 0 else math.inf
+        j = candidate if lower < candidate < upper else (lower + upper) / 2
+
     # 拐点附近 Newton 可能长期停留在括区间一端；退回单调电路的二分法，
     # 而不是把纯数值失败当成器件不支持该参数。仍使用同一物理残差。
     def fallback_residual(current):
-        core_v = max(0.0, (target-p.series_ohm*current)/divider)
-        main_i = current-bg_scale*math.sinh(core_v/p.hopping_voltage_v)
-        barrier_v = vt*math.asinh(main_i/max(scale, 1e-300)) if vt else 0.0
-        return main_i*resistance+barrier_v-core_v
+        core_v = max(0.0, (target - p.series_ohm * current) / divider)
+        main_i = current - bg_scale * math.sinh(core_v / p.hopping_voltage_v)
+        barrier_v = vt * math.asinh(main_i / max(scale, 1e-300)) if vt else 0.0
+        return main_i * resistance + barrier_v - core_v
+
     j = _bisect(fallback_residual, lower, upper)
-    u = max(0.0, (target-p.series_ohm*j)/divider)
-    main = j-bg_scale*math.sinh(u/p.hopping_voltage_v)
-    gap = vt*math.asinh(main/max(scale, 1e-300)) if vt else 0.0
-    return OperatingPoint(voltage_v, voltage_v, sign*u, sign*(j+u*leak), sign*j,
-                          sign*max(0.0, gap), temperature_k, False)
+    u = max(0.0, (target - p.series_ohm * j) / divider)
+    main = j - bg_scale * math.sinh(u / p.hopping_voltage_v)
+    gap = vt * math.asinh(main / max(scale, 1e-300)) if vt else 0.0
+    return OperatingPoint(
+        voltage_v,
+        voltage_v,
+        sign * u,
+        sign * (j + u * leak),
+        sign * j,
+        sign * max(0.0, gap),
+        temperature_k,
+        False,
+    )
 
 
-def simulate_transient(time_s: Sequence[float], voltage_v: Sequence[float],
-                       initial_state: State | None = None, params: Parameters | None = None,
-                       options: TransientOptions | None = None, *, initial_temperature_k: float | None = None,
-                       rtol: float = 1e-3, atol_m: float = 1e-13,
-                       max_step_s: float = 5e-9, max_steps: int = 500000) -> TransientResult:
+def simulate_transient(
+    time_s: Sequence[float],
+    voltage_v: Sequence[float],
+    initial_state: State | None = None,
+    params: Parameters | None = None,
+    options: TransientOptions | None = None,
+    *,
+    initial_temperature_k: float | None = None,
+    rtol: float = 1e-3,
+    atol_m: float = 1e-13,
+    max_step_s: float = 5e-9,
+    max_steps: int = 500000,
+) -> TransientResult:
     """将连续 SET–READ–RESET–READ 电压波形转为连续状态及观测电流。
 
     输入须为实际两端电压、严格递增时间；原始数据的时间重建、示波器
@@ -637,79 +783,106 @@ def simulate_transient(time_s: Sequence[float], voltage_v: Sequence[float],
     应在更细时间网格模拟，再由观测层做真实积分窗口平均。
     """
     import numpy as np
+
     p, opts = params or Parameters(), options or TransientOptions()
     state = initial_state or State()
     state.validate(p)
     ts, vs = list(map(float, time_s)), list(map(float, voltage_v))
-    if len(ts) != len(vs) or len(ts) < 2 or not all(math.isfinite(v) for v in ts+vs):
+    if len(ts) != len(vs) or len(ts) < 2 or not all(math.isfinite(v) for v in ts + vs):
         raise ValueError("瞬态输入须等长、至少两点且有限")
-    if any(b <= a for a, b in zip(ts, ts[1:])):
+    if any(b <= a for a, b in pairwise(ts)):
         raise ValueError("瞬态时间须严格递增；不能排序或自动丢弃重复时间戳")
     if not math.isfinite(rtol) or rtol <= 0 or not 0 < atol_m < p.atomic_step_m:
         raise ValueError("瞬态积分容差非法")
     if not math.isfinite(max_step_s) or max_step_s <= 0 or max_steps <= 0:
         raise ValueError("瞬态步长和步数上限须为正")
-    temperature = p.ambient_k if initial_temperature_k is None else initial_temperature_k
+    temperature = (
+        p.ambient_k if initial_temperature_k is None else initial_temperature_k
+    )
     if not math.isfinite(temperature) or not 0 < temperature <= p.temperature_limit_k:
         raise ValueError("初温非法")
 
     def point(v, s, temp):
-        return (_fixed_temperature_point(v, s, p, temp) if opts.thermal_time_s else operating_point(v, s, p))
+        return (
+            _fixed_temperature_point(v, s, p, temp)
+            if opts.thermal_time_s
+            else operating_point(v, s, p)
+        )
 
     def project(x, w, old):
         x = min(p.thickness_m, max(0.0, x))
         if 0 < x < atol_m and x < old.x_m:
             x = 0.0
-        return State(x, min(p.filament_max_m, max(p.seed_diameter_m, w)), max(old.x0_m, x))
+        return State(
+            x, min(p.filament_max_m, max(p.seed_diameter_m, w)), max(old.x0_m, x)
+        )
 
     def thermal(old, power, h):
-        equilibrium = p.ambient_k+max(0.0, power)*p.thermal_k_w
+        equilibrium = p.ambient_k + max(0.0, power) * p.thermal_k_w
         if not opts.thermal_time_s:
             return equilibrium
-        return equilibrium+(old-equilibrium)*math.exp(-h/opts.thermal_time_s)
+        return equilibrium + (old - equilibrium) * math.exp(-h / opts.thermal_time_s)
 
     points, states = [point(vs[0], state, temperature)], [state]
     accepted = attempts = 0
     next_h = max_step_s
     for k in range(1, len(ts)):
-        duration = ts[k]-ts[k-1]
+        duration = ts[k] - ts[k - 1]
         local = 0.0
         while local < duration:
             attempts += 1
             if attempts > max_steps:
                 raise ModelError("瞬态积分超过 max_steps")
-            h = min(duration-local, next_h, max_step_s)
-            v0 = vs[k-1]+(vs[k]-vs[k-1])*local/duration
+            h = min(duration - local, next_h, max_step_s)
+            v0 = vs[k - 1] + (vs[k] - vs[k - 1]) * local / duration
             op0 = point(v0, state, temperature)
             r0 = switching_rates(v0, state, p, op0)
             speed = max(abs(r0.dx_m_s), abs(r0.dw_m_s))
             if speed:
-                h = min(h, .1*p.atomic_step_m/speed)
-            if h <= 0 or local+h == local:
+                h = min(h, 0.1 * p.atomic_step_m / speed)
+            if h <= 0 or local + h == local:
                 raise ModelError("瞬态步长低于浮点分辨率")
-            v1 = vs[k-1]+(vs[k]-vs[k-1])*(local+h)/duration
-            predicted = project(state.x_m+h*r0.dx_m_s, state.w_m+h*r0.dw_m_s, state)
-            power0 = op0.switching_a*op0.internal_v
+            v1 = vs[k - 1] + (vs[k] - vs[k - 1]) * (local + h) / duration
+            predicted = project(
+                state.x_m + h * r0.dx_m_s, state.w_m + h * r0.dw_m_s, state
+            )
+            power0 = op0.switching_a * op0.internal_v
             temp_predict = thermal(temperature, power0, h)
             if temp_predict > p.temperature_limit_k:
                 raise ModelError("瞬态温度超过保护上限")
             op1 = point(v1, predicted, temp_predict)
             r1 = switching_rates(v1, predicted, p, op1)
-            dx1 = r1.dx_m_s if r0.dx_m_s*r1.dx_m_s >= 0 else 0.0
+            dx1 = r1.dx_m_s if r0.dx_m_s * r1.dx_m_s >= 0 else 0.0
             dw1 = r1.dw_m_s if state.x_m == 0 else 0.0
-            corrected = project(state.x_m+.5*h*(r0.dx_m_s+dx1), state.w_m+.5*h*(r0.dw_m_s+dw1), state)
-            temp_correct = thermal(temperature, .5*(power0+op1.switching_a*op1.internal_v), h)
-            error = max(abs(corrected.x_m-predicted.x_m)/(atol_m+rtol*max(state.x_m, corrected.x_m)),
-                        abs(corrected.w_m-predicted.w_m)/(atol_m+rtol*max(state.w_m, corrected.w_m)))
+            corrected = project(
+                state.x_m + 0.5 * h * (r0.dx_m_s + dx1),
+                state.w_m + 0.5 * h * (r0.dw_m_s + dw1),
+                state,
+            )
+            temp_correct = thermal(
+                temperature, 0.5 * (power0 + op1.switching_a * op1.internal_v), h
+            )
+            error = max(
+                abs(corrected.x_m - predicted.x_m)
+                / (atol_m + rtol * max(state.x_m, corrected.x_m)),
+                abs(corrected.w_m - predicted.w_m)
+                / (atol_m + rtol * max(state.w_m, corrected.w_m)),
+            )
             if opts.thermal_time_s:
-                error = max(error, abs(temp_correct-temp_predict)/(.02+rtol*max(temperature, temp_correct)))
+                error = max(
+                    error,
+                    abs(temp_correct - temp_predict)
+                    / (0.02 + rtol * max(temperature, temp_correct)),
+                )
             if error <= 1:
                 state, temperature = corrected, temp_correct
-                local = min(duration, local+h)
-                if duration-local < max(duration*1e-13, math.ulp(duration)):
+                local = min(duration, local + h)
+                if duration - local < max(duration * 1e-13, math.ulp(duration)):
                     local = duration
                 accepted += 1
-            next_h = h*(2 if error == 0 else min(2.0, max(.1, .85/math.sqrt(error))))
+            next_h = h * (
+                2 if error == 0 else min(2.0, max(0.1, 0.85 / math.sqrt(error)))
+            )
         output = point(vs[k], state, temperature)
         temperature = output.temperature_k
         if temperature > p.temperature_limit_k:
@@ -717,6 +890,12 @@ def simulate_transient(time_s: Sequence[float], voltage_v: Sequence[float],
         points.append(output)
         states.append(state)
     slopes = np.gradient(np.asarray(vs), np.asarray(ts))
-    cap = [opts.pad_capacitance_f*float(slope) for slope in slopes]
-    return TransientResult(ts, points, states, cap,
-                           [op.current_a+ic for op, ic in zip(points, cap)], accepted)
+    cap = [opts.pad_capacitance_f * float(slope) for slope in slopes]
+    return TransientResult(
+        ts,
+        points,
+        states,
+        cap,
+        [op.current_a + ic for op, ic in zip(points, cap, strict=True)],
+        accepted,
+    )

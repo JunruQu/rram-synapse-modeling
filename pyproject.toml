@@ -1,0 +1,13 @@
+[project]
+name = "rram-synapse-modeling"
+version = "0.1.0"
+description = "Physics-based RRAM DC compact model and parameter calibration"
+requires-python = ">=3.11"
+dependencies = ["numpy>=2.0", "scipy>=1.14", "matplotlib>=3.9", "pandas>=2.2", "openpyxl>=3.1"]
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

@@ -20,7 +20,7 @@
 
 HiRes 用户确认的关键信息：
 
-- 原 `voltage_v` 是对地 Vforce，原 `current_a` 实际为 Vread。必须换算 `I_DUT=Vread/50 Ω`、`V_DUT=Vforce−Vread`；不再次加入已扣除的读出电阻压降。
+- 原始列为 `time_s,vforce_v,vsense_v`：`vforce_v` 是对地 Vforce，`vsense_v` 是 50 Ω 取样电阻上的 Vsense。必须换算 `I_DUT=vsense_v/50 Ω`、`V_DUT=vforce_v−vsense_v`；不再次加入已扣除的读出电阻压降。
 - 时间有效精度不足，约 0.16 ns 节拍可从前段识别；文件第 12501 个数据点归零，前半为 SET–READ，后半为 RESET–READ，用户确认可按无额外等待的同周期连接。
 - 原始文件未改动。转换数据和原文件 SHA256 在 `data/pulse/prepared/`，转换 CSV 保留源时间/电压/读取列。
 - 固定条件为 L=5 nm、最大直径 5 nm、种子直径 0.5 nm，初态 x=0.15 nm、w=2.5 nm、x0=1 nm、T=300 K，均不是独立实测几何。

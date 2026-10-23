@@ -40,10 +40,10 @@ DC 与 HiRes 参数分别保存，未假定可以直接通用。以上是单周�
 
 ## HiRes 数据与瞬态模型
 
-原 CSV 中 `voltage_v` 是对地施加电压 Vforce，`current_a` 实际记录的是读取电压 Vread。转换为：
+HiRes 原 CSV 的列为 `time_s,vforce_v,vsense_v`：`vforce_v` 是对地施加电压 Vforce，`vsense_v` 是 50 Ω 取样电阻上的读取电压 Vsense。转换为：
 
-- 器件电流：`I_DUT = Vread / 50 Ω`。
-- 器件差分电压：`V_DUT = Vforce − Vread`。
+- 器件电流：`I_DUT = vsense_v / 50 Ω`。
+- 器件差分电压：`V_DUT = vforce_v − vsense_v`。
 - 测试不限流；50 Ω 读出电阻压降已扣除，不重复加入器件接触电阻。
 
 原时间列存在舍入重复值，并在 SET–READ 与 RESET–READ 两半之间归零。程序依据前段约 0.16 ns 的采样节拍重建时间，逐行核对原始十进制精度，按已确认的无额外间隔连接两个半周期；保持行顺序和全部测量点。转换 CSV 保留原时间、电压及读取列用于追溯，原始文件不改写。

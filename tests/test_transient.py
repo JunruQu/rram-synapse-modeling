@@ -195,7 +195,7 @@ class PulseDataTests(unittest.TestCase):
                 "time_s,voltage_v,current_a\n0.000,0.9,-0.001\n0.001,0.2,-0.0003\n0.002,-1.3,0.0005\n"
             )
             (source / "pulse_iv_500ns_HiRes.csv").write_text(
-                "time_s,voltage_v,current_a\n0.000,0.9,0.05\n0.001,0.4,0.01\n0.002,-1.3,-0.05\n"
+                "time_s,vforce_v,vsense_v\n0.000,0.9,0.05\n0.001,0.4,0.01\n0.002,-1.3,-0.05\n"
             )
             data, _ = prepare(source, Path(directory) / "prepared")
             b = next(d for d in data if d.instrument == "b1530")

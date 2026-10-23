@@ -99,8 +99,8 @@ def prepare(input_dir="data/pulse", output_dir="data/pulse/prepared"):
     audit = {
         "conditions": {
             "b1530_current": "I_DUT = -source current_a",
-            "hires_current": "I_DUT = source current_a / 50 ohm (source column is Vread)",
-            "hires_voltage": "V_DUT = source voltage_v - source current_a (Vforce - Vread)",
+            "hires_current": "I_DUT = source vsense_v / 50 ohm",
+            "hires_voltage": "V_DUT = source vforce_v - source vsense_v",
             "compliance": "none, both devices",
             "b1530_integration_s": 10e-9,
             "devices": "all B1530A files are one device; HiRes is another device",
@@ -111,17 +111,22 @@ def prepare(input_dir="data/pulse", output_dir="data/pulse/prepared"):
     }
     data = []
     for source in sorted(Path(input_dir).glob("pulse_iv_*.csv")):
+        hires = "HiRes" in source.name
         with source.open(encoding="utf-8-sig", newline="") as stream:
             reader = csv.DictReader(stream)
-            if reader.fieldnames != ["time_s", "voltage_v", "current_a"]:
+            expected_fields = (
+                ["time_s", "vforce_v", "vsense_v"]
+                if hires
+                else ["time_s", "voltage_v", "current_a"]
+            )
+            if reader.fieldnames != expected_fields:
                 raise ValueError(f"{source}: 列名不符")
             rows = list(reader)
         array = np.array(
-            [[float(r[k]) for k in ("time_s", "voltage_v", "current_a")] for r in rows]
+            [[float(r[k]) for k in expected_fields] for r in rows]
         )
         if not np.all(np.isfinite(array)):
             raise ValueError(f"{source}: NaN/Inf")
-        hires = "HiRes" in source.name
         ts, info = rebuild_time([r["time_s"] for r in rows], allow_reset=hires)
         v = array[:, 1] - array[:, 2] if hires else array[:, 1]
         current = array[:, 2] / 50 if hires else -array[:, 2]
@@ -139,8 +144,8 @@ def prepare(input_dir="data/pulse", output_dir="data/pulse/prepared"):
                     "voltage_v",
                     "current_a",
                     "source_time_s",
-                    "source_voltage_v",
-                    "source_current_column",
+                    "source_vforce_v" if hires else "source_voltage_v",
+                    "source_vsense_v" if hires else "source_current_a",
                 ]
             )
             writer.writerows(
@@ -480,8 +485,8 @@ def fit_group(
             "lower": LOWER.tolist(),
             "upper": UPPER.tolist(),
             "max_nfev_per_stage": max_nfev,
-            "scope_current_conversion": "Vread / 50",
-            "scope_voltage_conversion": "Vforce - Vread",
+            "scope_current_conversion": "vsense_v / 50 ohm",
+            "scope_voltage_conversion": "vforce_v - vsense_v",
             "compliance": None,
             "rtol": 0.003,
             "atol_m": 1e-13,
@@ -550,7 +555,7 @@ def fit_group(
         "No independent zero-current calibration supplied: no data-dependent current offset subtraction",
     ]
     if group == "hires":
-        notes.append("I_DUT = Vread / 50 ohm; V_DUT = Vforce - Vread")
+        notes.append("I_DUT = vsense_v / 50 ohm; V_DUT = vforce_v - vsense_v")
     else:
         notes.append(
             "50 ns sampling cannot resolve the 20/50 ns drive shape or precise switching delay"

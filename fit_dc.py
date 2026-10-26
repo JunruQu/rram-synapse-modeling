@@ -480,7 +480,10 @@ def export_results(
             "rmse_a": math.sqrt(sum(e * e for e in errors) / len(errors)),
             "max_abs_error_a": max(abs(e) for e in errors),
         }
-        with (output / f"prediction_{index}.csv").open(
+        prediction_name = (
+            "prediction.csv" if len(datasets) == 1 else f"prediction_{index}.csv"
+        )
+        with (output / prediction_name).open(
             "w", newline="", encoding="utf-8"
         ) as stream:
             writer = csv.writer(stream)
@@ -551,7 +554,7 @@ def export_results(
                 axis.legend()
             axes[row, 1].set_yscale("symlog", linthresh=1e-8)
         fig.tight_layout()
-        fig.savefig(output / "iv_comparison.png", dpi=160)
+        fig.savefig(output / "comparison.png", dpi=160)
         plt.close(fig)
     return summary
 

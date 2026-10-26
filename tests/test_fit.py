@@ -86,7 +86,10 @@ class DataTests(unittest.TestCase):
                 report = export_results(
                     output, params, data, config.get("solver"), plot=False
                 )
-                self.assertTrue((output / "prediction_0.csv").is_file())
+                prediction_name = (
+                    "prediction.csv" if len(data) == 1 else "prediction_0.csv"
+                )
+                self.assertTrue((output / prediction_name).is_file())
                 self.assertTrue((output / "parameters.json").is_file())
                 self.assertIn("datasets", report)
             config = json.loads(dynamic.read_text(encoding="utf-8"))

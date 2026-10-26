@@ -198,6 +198,12 @@ class PulseDataTests(unittest.TestCase):
                 "time_s,vforce_v,vsense_v\n0.000,0.9,0.05\n0.001,0.4,0.01\n0.002,-1.3,-0.05\n"
             )
             data, _ = prepare(source, Path(directory) / "prepared")
+            self.assertTrue(
+                (Path(directory) / "prepared" / "100ns_b1530_prepared.csv").is_file()
+            )
+            self.assertTrue(
+                (Path(directory) / "prepared" / "500ns_hires_prepared.csv").is_file()
+            )
             b = next(d for d in data if d.instrument == "b1530")
             h = next(d for d in data if d.instrument == "hires")
             np.testing.assert_allclose(b.current_a, [0.001, 0.0003, -0.0005])

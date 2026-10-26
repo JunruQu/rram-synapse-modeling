@@ -1,6 +1,6 @@
 # 接续上下文
 
-更新：2026-10-23。此文件是压缩后的项目工作记忆，配合 `AGENTS.md` 和 `TODO.md` 使用，不是完整历史报告。
+更新：2026-10-26。此文件是压缩后的项目工作记忆，配合 `AGENTS.md` 和 `TODO.md` 使用，不是完整历史报告。
 
 ## 当前目标与成果
 
@@ -15,19 +15,20 @@
 
 | 数据 | 来源与处理 | 最终结果 |
 | --- | --- | --- |
-| DC cycle 3 | `data/dc/dc_iv_cycle3.csv`；404 点；按约 0.5 ms/点重建时间；设定电压；仅正偏 SET 限流 1 mA | `outputs/measured_dc/cycle3/refined/`；全周期 RMSE 57.19 µA |
-| HiRes 500 ns | `data/pulse/pulse_iv_500ns_HiRes.csv`；25000 点；单周期 SET–READ–RESET–READ；不限流 | `outputs/pulse/hires/`；全量 RMSE 50.09 µA，READ-LRS/HRS 4.00/19.42 µA |
+| DC cycle 1 | `data/dc/dc_iv_cycle1.csv`；404 点；`time_s` 间隔 0.5 ms；设定电压；仅正偏 SET 限流 1 mA | `outputs/dc/cycle1/`；全周期 RMSE 46.48 µA |
+| HiRes 500 ns | `data/pulse/pulse_iv_500ns_HiRes.csv`；25000 点；单周期 SET–READ–RESET–READ；不限流 | `outputs/pulse/500ns_hires/`；全量 RMSE 50.09 µA，READ-LRS/HRS 4.00/19.42 µA |
 
 HiRes 用户确认的关键信息：
 
 - 原始列为 `time_s,vforce_v,vsense_v`：`vforce_v` 是对地 Vforce，`vsense_v` 是 50 Ω 取样电阻上的 Vsense。必须换算 `I_DUT=vsense_v/50 Ω`、`V_DUT=vforce_v−vsense_v`；不再次加入已扣除的读出电阻压降。
 - 时间有效精度不足，约 0.16 ns 节拍可从前段识别；文件第 12501 个数据点归零，前半为 SET–READ，后半为 RESET–READ，用户确认可按无额外等待的同周期连接。
-- 原始文件未改动。转换数据和原文件 SHA256 在 `data/pulse/prepared/`，转换 CSV 保留源时间/电压/读取列。
+- 原始文件未改动。转换数据 `500ns_hires_prepared.csv` 和原文件 SHA256 审计在 `data/pulse/prepared/`，转换 CSV 保留源时间/电压/读取列。
 - 固定条件为 L=5 nm、最大直径 5 nm、种子直径 0.5 nm，初态 x=0.15 nm、w=2.5 nm、x0=1 nm、T=300 K，均不是独立实测几何。
 
 ## 参数解释与重要限制
 
-- DC 接受结果是 cycle 3 的独立传导/动力学校准，完整初值与边界在 `data/dc/prepared/cycle3_refined_config.json`。初态直接记录在配置中，不依赖已删除的周期数据。
+- DC 接受结果现为 cycle 1 的单周期传导/动力学校准，完整初值与边界在 `data/dc/prepared/fit_config.json`，整理数据和审计分别为 `cycle1_prepared.csv`、`audit.json`。初态采用模型默认 HRS（x=1 nm，w=0.5 nm，x0=1 nm），是显式条件假设，不是独立测量。
+- cycle 1 拟合成功，拟合目标 RMSE 为 46.48 µA；5 个拟合参数的局部 Jacobian 满秩、无边界参数，但这不证明全局唯一可辨识。拟合报告、最终参数、预测和图均保存在 `outputs/dc/cycle1/`。
 - HiRes 的 `parameters.json`、`transient_options.json` 和 `fit_config.json` 保存最终器件参数、通道/瞬态参数、固定状态、优化边界及坐标。配置自含参考参数和最终坐标；现有 CLI 新拟合入口仍把 DC 文件当初值尺度，后续解耦见 TODO。
 - HiRes 有效电容约 1.04e-16 F，接近零边界；热时间约 0.2015 ns，接近 0.2 ns 搜索下限；电流通道响应约 14.13 ns。不能将这些数值直接认定为本征电容或独立测得的热时间。
 - HiRes 优化按 `xtol` 停止。几何、温升、能垒、传导温度系数和通道响应仍相关；能描述主波形，但残余振铃未完全解释。
@@ -35,7 +36,7 @@ HiRes 用户确认的关键信息：
 
 ## 已完成的清理决定
 
-用户接受 DC cycle 3 和 HiRes 拟合。其他 DC 周期及全部 B1530A 原始/整理/拟合数据已删除。旧跨脉宽对比、历史报告、阶段日志、初始曲线已清理。通用仪器转换代码与测试保留，但不要恢复被删除的数据或报告。
+用户接受 DC cycle 1 和 HiRes 拟合；cycle 3 原始数据、整理输入、配置和拟合结果已移除。其他 DC 周期及全部 B1530A 原始/整理/拟合数据已删除。旧跨脉宽对比、历史报告、阶段日志、初始曲线已清理。通用仪器转换代码与测试保留，但不要恢复已删除的数据或报告。
 
 最终图/预测只含测量与接受的最终模型，未保留初始曲线列。`report.json` 是精简的最终机器校准指标，保留以复核结果；它不是旧历史对比报告。
 

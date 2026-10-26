@@ -22,19 +22,19 @@
 
 | 数据 | 评价范围 | 电流 RMSE |
 | --- | --- | --- |
-| DC cycle 3 | 全部 404 点 | 57.19 µA |
+| DC cycle 1 | 全部 404 点 | 46.48 µA |
 | HiRes 500 ns SET–READ–RESET–READ | 全部 25000 点 | 50.09 µA |
 | 同一 HiRes 的 READ-LRS | 周期内 1.15–1.45 µs | 4.00 µA |
 | 同一 HiRes 的 READ-HRS | 周期内 3.15–3.45 µs | 19.42 µA |
 
-DC 与 HiRes 参数分别保存，未假定可以直接通用。以上是单周期、给定几何和初态的条件校准，不是跨器件、跨脉宽预测验证。全周期误差与固定 READ 窗口误差均按原始采样点计算，没有通过平均或删除测量点降低误差。
+DC 与 HiRes 参数分别保存，未假定可以直接通用。DC cycle 1 初态采用模型默认高阻态（`x=1 nm, w=0.5 nm, x0=1 nm`），是条件假设，不是独立实测。以上是单周期、给定几何和初态的条件校准，不是跨器件、跨脉宽预测验证。全周期误差与固定 READ 窗口误差均按原始采样点计算，没有通过平均或删除测量点降低误差。
 
 ### 保留文件
 
-- DC 原始数据：`data/dc/dc_iv_cycle3.csv`；整理输入及配置：`data/dc/prepared/`。
-- DC 最终参数、预测和曲线：`outputs/measured_dc/cycle3/refined/`。
-- HiRes 原始数据：`data/pulse/pulse_iv_500ns_HiRes.csv`；转换输入和追溯审计：`data/pulse/prepared/`。
-- HiRes 最终结果：`outputs/pulse/hires/`，包含 `parameters.json`、`transient_options.json`、`fit_config.json`、`pulse_iv_500ns_HiRes_prediction.csv`、`pulse_iv_500ns_HiRes.png` 及精简的 `report.json` 校准指标。
+- DC 原始数据：`data/dc/dc_iv_cycle1.csv`；整理数据、配置及审计：`data/dc/prepared/`。
+- DC 最终结果：`outputs/dc/cycle1/`，统一包含 `parameters.json`、`prediction.csv`、`comparison.png`、`report.json` 和运行配置。
+- HiRes 原始数据：`data/pulse/pulse_iv_500ns_HiRes.csv`；整理数据为 `data/pulse/prepared/500ns_hires_prepared.csv`，审计为同目录 `audit.json`。
+- HiRes 最终结果：`outputs/pulse/500ns_hires/`，与 DC 统一使用 `parameters.json`、`prediction.csv`、`comparison.png` 和 `report.json`，并保留 `fit_config.json`、`transient_options.json`。
 
 仅保留上述实验数据和最终结果。中间参数轨迹、初始预测曲线、多条件对比报告及旧汇总已清理。
 
@@ -74,9 +74,9 @@ uv run python fit_pulse.py prepare
 
 ```bash
 uv run python fit_pulse.py fit --device hires --max-nfev 30 --output outputs/pulse/refit
-uv run python fit_dc.py fit data/dc/prepared/cycle3_refined_config.json --output outputs/measured_dc/cycle3/refit
+uv run python fit_dc.py fit data/dc/prepared/fit_config.json --output outputs/dc/cycle1/refit
 ```
 
-HiRes 的完整初始参数、优化边界、最终坐标及固定状态均保存在 `outputs/pulse/hires/fit_config.json`。单独检验数值细化可运行 `uv run python fit_pulse.py validate`；该命令只处理当前存在的数据与配置，不重拟合参数，并会生成新的数值检查文件。
+HiRes 的完整初始参数、优化边界、最终坐标及固定状态均保存在 `outputs/pulse/500ns_hires/fit_config.json`。单独检验数值细化可运行 `uv run python fit_pulse.py validate`；该命令只处理当前存在的数据与配置，不重拟合参数，并会生成新的数值检查文件。
 
 今后新增实验请保留实际器件端 V–t/I–t、编程和读出条件、初始阻态、脉冲间隔及重复统计。优先以共享参数预测未参与校准的条件，再依据独立证据扩展物理状态。

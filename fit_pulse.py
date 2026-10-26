@@ -122,9 +122,7 @@ def prepare(input_dir="data/pulse", output_dir="data/pulse/prepared"):
             if reader.fieldnames != expected_fields:
                 raise ValueError(f"{source}: 列名不符")
             rows = list(reader)
-        array = np.array(
-            [[float(r[k]) for k in expected_fields] for r in rows]
-        )
+        array = np.array([[float(r[k]) for k in expected_fields] for r in rows])
         if not np.all(np.isfinite(array)):
             raise ValueError(f"{source}: NaN/Inf")
         ts, info = rebuild_time([r["time_s"] for r in rows], allow_reset=hires)
@@ -132,11 +130,12 @@ def prepare(input_dir="data/pulse", output_dir="data/pulse/prepared"):
         current = array[:, 2] / 50 if hires else -array[:, 2]
         width = int(source.stem.split("_")[2].removesuffix("ns"))
         instrument = "hires" if hires else "b1530"
+        prepared_name = f"{width}ns_{instrument}_prepared.csv"
         datum = PulseData(
             source.stem, ts, v, current, width, instrument, 0 if hires else 10e-9
         )
         data.append(datum)
-        with (output / source.name).open("w", newline="") as stream:
+        with (output / prepared_name).open("w", newline="") as stream:
             writer = csv.writer(stream)
             writer.writerow(
                 [
@@ -153,6 +152,7 @@ def prepare(input_dir="data/pulse", output_dir="data/pulse/prepared"):
             )
         info.update(
             name=source.name,
+            prepared_file=prepared_name,
             source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
             rows=len(rows),
             instrument=instrument,
@@ -514,9 +514,12 @@ def fit_group(
                 np.sqrt(np.mean((fitted[mask] - datum.current_a[mask]) ** 2))
             )
         statistics.append(metric)
-        with (output / (datum.name + "_prediction.csv")).open(
-            "w", newline=""
-        ) as stream:
+        single_datum = len(data) == 1
+        prediction_name = (
+            "prediction.csv" if single_datum else datum.name + "_prediction.csv"
+        )
+        comparison_name = "comparison.png" if single_datum else datum.name + ".png"
+        with (output / prediction_name).open("w", newline="") as stream:
             writer = csv.writer(stream)
             writer.writerow(
                 [
@@ -548,7 +551,7 @@ def fit_group(
                     strict=True,
                 )
             )
-        plot_result(datum, fitted, output)
+        plot_result(datum, fitted, output, filename=comparison_name)
     final = full_residual(values)
     notes = [
         "No current compliance",
@@ -578,7 +581,7 @@ def fit_group(
     return values
 
 
-def plot_result(data, fitted, output):
+def plot_result(data, fitted, output, *, filename=None):
     import matplotlib
 
     matplotlib.use("Agg")
@@ -603,7 +606,7 @@ def plot_result(data, fitted, output):
         a.grid(alpha=0.2)
     fig.suptitle(data.name)
     fig.tight_layout()
-    fig.savefig(output / (data.name + ".png"), dpi=160)
+    fig.savefig(output / (filename or data.name + ".png"), dpi=160)
     plt.close(fig)
 
 
@@ -612,16 +615,16 @@ def validate_results(output_dir="outputs/pulse"):
     data, _ = prepare()
     output = Path(output_dir)
     checks = []
-    for group, name in (
-        ("b1530", "pulse_iv_100ns"),
-        ("b1530", "pulse_iv_500ns"),
-        ("hires", "pulse_iv_500ns_HiRes"),
+    for group, folder, name in (
+        ("b1530", "b1530", "pulse_iv_100ns"),
+        ("b1530", "b1530", "pulse_iv_500ns"),
+        ("hires", "500ns_hires", "pulse_iv_500ns_HiRes"),
     ):
-        if not (output / group / "fit_config.json").exists() or not any(
+        if not (output / folder / "fit_config.json").exists() or not any(
             d.name == name for d in data
         ):
             continue
-        config = json.loads((output / group / "fit_config.json").read_text())
+        config = json.loads((output / folder / "fit_config.json").read_text())
         reference = Parameters(**config["reference_parameters"])
         state = State(**config["initial_state"])
         datum = next(d for d in data if d.name == name)
@@ -690,9 +693,7 @@ def main(argv=None):
         print("Pulse data prepared:", [d.name for d in data])
         return
     reference = Parameters(
-        **json.loads(
-            Path("outputs/measured_dc/cycle3/refined/parameters.json").read_text()
-        )
+        **json.loads(Path("outputs/dc/cycle1/parameters.json").read_text())
     )
     for instrument in ("b1530", "hires"):
         if args.device in (instrument, "all"):
@@ -701,7 +702,8 @@ def main(argv=None):
                 if args.device == "all":
                     continue
                 raise ValueError(f"未找到 {instrument} 输入数据")
-            folder = Path(args.output) / instrument
+            folder_name = "500ns_hires" if instrument == "hires" else instrument
+            folder = Path(args.output) / folder_name
             coordinates = (
                 json.loads((folder / "fit_config.json").read_text())[
                     "final_coordinates"

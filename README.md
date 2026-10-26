@@ -36,7 +36,21 @@ DC 与 HiRes 参数分别保存，未假定可以直接通用。DC cycle 1 初�
 - HiRes 原始数据：`data/pulse/pulse_iv_500ns_HiRes.csv`；整理数据为 `data/pulse/prepared/500ns_hires_prepared.csv`，审计为同目录 `audit.json`。
 - HiRes 最终结果：`outputs/pulse/500ns_hires/`，与 DC 统一使用 `parameters.json`、`prediction.csv`、`comparison.png` 和 `report.json`，并保留 `fit_config.json`、`transient_options.json`。
 
-仅保留上述实验数据和最终结果。中间参数轨迹、初始预测曲线、多条件对比报告及旧汇总已清理。
+上述是当前接受的实验基线。中间参数轨迹、初始预测曲线、多条件对比报告及旧汇总已清理；新的 DC 校准候选按下节独立存放。
+
+## DC 校准算法更新
+
+针对正偏 HRS 电流偏低和 SET 过渡偏缓，新增分区混合目标、传导/SET/LRS/RESET 分阶段校准及最终条件联合细化。HRS 使用有符号 `asinh` 误差，SET 保留局部线性电流约束；耦合参数先联合搜索，数值 Jacobian 可按边界跨度控制差分步长。全部 404 点仍参与最终目标，每个窗口保留完整状态历史。原因、参数作用、窗口与权重见 [DC_CALIBRATION.md](DC_CALIBRATION.md)，配置见 [configs/dc_cycle1_balanced.json](configs/dc_cycle1_balanced.json)。
+
+```bash
+uv run python fit_dc.py fit configs/dc_cycle1_balanced.json --output outputs/dc/cycle1_balanced
+uv run python fit_dc.py simulate outputs/dc/cycle1_balanced/config_used.json --output /tmp/dc_cycle1_replay
+uv run python fit_dc.py validate outputs/dc/cycle1_balanced/config_used.json --output outputs/dc/cycle1_balanced
+```
+
+本次[候选曲线](outputs/dc/cycle1_balanced/comparison.png)的正偏 HRS / SET 邻域 RMSE 分别为 0.65 / 27.99 µA，旧基线为 76.01 / 168.43 µA；全周期由 46.48 降至 45.66 µA，但返回 LRS 区由 11.15 增至 60.42 µA。扩径尺度接近上界，参数仍强相关；这是揭示模型折中的候选，不替换接受基线。相同测点、窗口和数值收敛结果见 [DC_CALIBRATION.md](DC_CALIBRATION.md)。
+
+新结果写入独立目录；接受基线不变。保存的 DC 配置现在可直接重放最终参数；`validate` 固定参数，在相同测点逐级细化积分并导出数值变化，不能代替实验验证。DC 拟合不再自动生成 `initial/`。
 
 ## HiRes 数据与瞬态模型
 
@@ -80,3 +94,45 @@ uv run python fit_dc.py fit data/dc/prepared/fit_config.json --output outputs/dc
 HiRes 的完整初始参数、优化边界、最终坐标及固定状态均保存在 `outputs/pulse/500ns_hires/fit_config.json`。单独检验数值细化可运行 `uv run python fit_pulse.py validate`；该命令只处理当前存在的数据与配置，不重拟合参数，并会生成新的数值检查文件。
 
 今后新增实验请保留实际器件端 V–t/I–t、编程和读出条件、初始阻态、脉冲间隔及重复统计。优先以共享参数预测未参与校准的条件，再依据独立证据扩展物理状态。
+
+## 本次 DC cycle 1 debug 总结（2026-10-26）
+
+本次针对正偏高阻态电流偏低、SET 电流跃迁过缓重新设计校准流程。沿用 404 个原始测点、0.5 ms/点和仅正偏 SET 限流 1 mA 的条件；器件方程与积分器保持原样，拟合候选单独保存。
+
+### 物理机制与参数耦合
+
+| 机制 | 相关参数 | 本次诊断 |
+| --- | --- | --- |
+| HRS hopping 传导 | `hopping_density_a_m2`（`J0`）、`hopping_voltage_v`（`V_T`）、间隙与 `hopping_length_m`、有效面积 | `J0` 控制幅值，`V_T` 控制电压非线性；初始间隙、衰减长度和面积可与幅值互相补偿，单条回线不能唯一分离。旧模型在 0.4 V 仅为 4.73 µA，实测为 10.5 µA。 |
+| SET 间隙闭合与后续扩径 | `generation_ev`（`Ea`）、`generation_alpha_m`（`alpha_a`）、`radial_shell_m`（`Delta w`） | 场辅助空位生成先使间隙闭合，再使细丝扩径。单独降低 `Ea` 容易使 SET 提前；`alpha_a` 影响场敏感度，`Delta w` 直接影响闭合后的直径增长。旧模型在约 0.78 V 已闭合并缓慢扩径，而实测到 0.86 V 仍只有 29.9 µA。 |
+| 电热反馈与金属传导 | `thermal_k_w`（`Rth`）、`conductivity_s_m`、`conduction_ev` | 自热加快离子过程，同时因 `sigma(T)=sigma0*exp(E_AC/(kBT))` 的正指数而降低金属电导率，SET、LRS 和 RESET 会一起改变。释放热阻的对照损害了 LRS，本次候选保留基线 `Rth=5,000 K/W`，未据此认定真实热阻。 |
+| 亚原子间隙与闭合后的局部场 | `x`、`x0`、原子尺度 `a` 及既有场闭合假设 | SET 间隙闭合后采用 `E=abs(U)/max(x0,a)`；该场分配与亚原子区压降插值可能影响 SET 形状。固定初态 `x=x0=1 nm, w=0.5 nm` 是条件假设，不能当作实测形貌。 |
+
+旧基线收紧积分容差与步长后，电流 RMS 变化仅约 0.0043 µA，远小于拟合误差，说明缓慢 SET 主要不能归因于积分误差。实测突变只被定位在 0.86–0.88 V、0.5 ms 的采样间隔内，不能从插值曲线推断更快的本征开关时间。
+
+### 拟合与校准算法调整
+
+1. **分区混合目标。** 全周期线性电流误差继续约束 mA 级区域；HRS 增加以 1 µA 为尺度的有符号 `asinh` 误差，SET 邻域增加局部线性约束。各块按点数归一化，显式权重表达校准优先级，不能当作仪器噪声方差；最终目标覆盖全部 404 点。
+2. **先传导、后动力学。** 先校准初始低场段的 `J0,V_T`，再联合搜索 SET 的能垒、场敏感度和扩径尺度，随后校准 LRS 金属电导及 RESET 动力学。各窗口均保留此前状态历史，仅可省去目标末点之后的未来计算。
+3. **参考场坐标与联合搜索。** 用 `b=Ea-Z*alpha_a*Eref`、`alpha_a`、`Delta w` 搜索，参考场取 `Eref=8.7e8 V/m`；采用固定随机种子的差分进化再局部细化，并核对坐标搜索域不超出声明的物理能垒边界。`b` 是优化坐标，不是新增物理能垒，也不替代实际局部场；本次对照仍有强相关，坐标变换不能补足缺失的实验信息。
+4. **条件联合细化与可辨识性检查。** `Ea` 与 `alpha_a` 的局部相关系数曾接近 1。最终候选固定已搜索的 SET 参数，再联合优化传导和 RESET；报告区分固定参数与待拟合参数，并检查边界、相关性及优化器梯度。`success`、`xtol` 或条件 Jacobian 满秩均不证明物理校准完成。
+5. **匹配数值导数与积分精度。** 新增按优化坐标边界跨度确定差分步长的方式，内部用中心差分、边界用单侧差分，避免同一个相对步长对 `log(alpha_a)` 和 eV 能垒产生失衡扰动。新增 `fit_dc.py validate` 固定参数逐级细化积分，检查电流、端电压、温度、几何和限流标记；保存配置可直接重放最终参数，拟合不再自动导出 `initial/`。
+
+### 同测点结果与保留结论
+
+下表为电流 RMSE（µA），行区间从 0 开始、右端不含；全周期使用相同的 404 个原始测点。
+
+| 区域 | 原始行区间 | 接受基线 | 新候选 |
+| --- | --- | --- | --- |
+| 初始低场 HRS | `[0,36)` | 6.52 | 0.50 |
+| 正偏 HRS | `[0,44)` | 76.01 | 0.65 |
+| SET 邻域 | `[35,50)` | 168.43 | 27.99 |
+| 返回 LRS / RESET 起始 | `[160,240)` | 11.15 | 60.42 |
+| RESET 及返回 HRS | `[240,404)` | 51.56 | 57.31 |
+| 全周期 | `[0,404)` | 46.48 | 45.66 |
+
+新候选在 0.4 V 为 10.19 µA，0.88 V 为 0.892 mA，0.90 V 到达 1 mA 限流。正偏 HRS 和 SET 局部明显改善，但返回 LRS 退化，且扩径尺度约 4.997 nm、接近 5 nm 搜索上界；最终虽按 `xtol` 停止，梯度指标仍不小。因此保留为条件校准候选，不替换已接受的 DC / HiRes 基线。
+
+最终配置重放的 404 点电流逐点一致。两级积分细化的电流 RMS 变化约为 0.0072 / 0.00027 µA，限流标记不变；SET 附近间隙的最大变化约为 0.091 / 0.0021 nm，说明电流稳定不等于亚原子几何已被唯一确定。验证为 40 项测试通过，Ruff 静态与格式检查通过。
+
+完整设计见 [DC_CALIBRATION.md](DC_CALIBRATION.md)，重新拟合配方见 [configs/dc_cycle1_balanced.json](configs/dc_cycle1_balanced.json)。候选结果在 `outputs/dc/cycle1_balanced/`，按现有 `.gitignore` 规则保留为本地生成结果；重放使用该目录的 `config_used.json`，完整分阶段重新拟合可能到达不同局部候选。后续应以独立初态、低扰动 I–V、温度约束及更密集 SET 数据检验几何与场闭合假设。

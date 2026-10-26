@@ -16,6 +16,7 @@ from fit_dc import (
     load_config,
     load_csv,
     main,
+    objective_blocks,
     predict,
     residual_values,
 )
@@ -66,6 +67,21 @@ class DataTests(unittest.TestCase):
         self.assertAlmostEqual(once, many)
         with self.assertRaises(ValueError):
             residual_values([0], [0], scale_a=0)
+
+    def test_invalid_residual_windows_are_rejected(self):
+        dataset = Dataset("s", [0, 1], [0, 0], None, "static", State())
+        for change in (
+            {"start": -1},
+            {"stop": 3},
+            {"start": 1, "stop": 1},
+            {"start": 0.5},
+            {"dataset": "unknown"},
+            {"weight": 0},
+        ):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                objective_blocks(
+                    [dataset], {"residual_blocks": [{"dataset": "s", **change}]}
+                )
 
     def test_static_predictions_freeze_state(self):
         dataset = Dataset("fixed", [0.5, 0, -0.5], [0] * 3, None, "static", State())
@@ -172,6 +188,10 @@ class CalibrationTests(unittest.TestCase):
                             }
                         },
                         "diff_step": 2e-4,
+                        "set_coordinates": {
+                            "reference_field_v_m": 3e8,
+                            "barrier_bounds_ev": [0.63, 0.87],
+                        },
                         "max_nfev": 60,
                     },
                     solver,
@@ -182,6 +202,116 @@ class CalibrationTests(unittest.TestCase):
                     report["initial_squared_residual"] * 0.05,
                 )
                 self.assertLess(abs(fitted.generation_ev - params.generation_ev), 0.01)
+
+    def test_window_objective_preserves_dynamic_history(self):
+        params = Parameters()
+        time = [k * 0.000025 for k in range(41)]
+        voltage = [k / 40 for k in range(41)]
+        solver = {"rtol": 1e-4, "atol_m": 1e-14}
+        trace = simulate_dc(time, voltage, params=params, **solver)
+        dataset = Dataset("d", voltage, [0] * 41, time, "dynamic", State())
+        # 后段已经 SET，不能把窗口首点重新解释为初始 HRS；窗口末点之后的
+        # 因果前缀裁剪则必须不改变本次目标。独立用完整轨迹计算预期平方和。
+        window = trace.points[32:38]
+        expected = sum(p.current_a**2 for p in window) / (len(window) * 1e-6**2)
+        _, report = fit_parameters(
+            params,
+            [dataset],
+            {
+                "parameters": {"generation_ev": {"bounds": [1.1, 1.3]}},
+                "residual_blocks": [
+                    {
+                        "dataset": "d",
+                        "start": 32,
+                        "stop": 38,
+                        "residual": "linear",
+                        "current_scale_a": 1e-6,
+                    }
+                ],
+                "initialization_points": 0,
+                "max_nfev": 1,
+            },
+            solver,
+        )
+        self.assertAlmostEqual(
+            report["initial_squared_residual"] / expected, 1, places=10
+        )
+        self.assertEqual(report["objective_blocks"][0]["stop"], 38)
+
+    def test_staged_mixed_calibration_recovers_known_conduction(self):
+        truth = replace(Parameters(), thermal_k_w=0)
+        voltage = [0.05, 0.1, 0.2, 0.4, 0.6]
+        datasets = []
+        for name, state in (("HRS", State()), ("LRS", State(0, 5e-9, 1e-9))):
+            datasets.append(
+                Dataset(
+                    name,
+                    voltage,
+                    [operating_point(v, state, truth).current_a for v in voltage],
+                    None,
+                    "static",
+                    state,
+                )
+            )
+        specs = {
+            "hopping_density_a_m2": {"initial": 7e12, "bounds": [2e12, 3e13]},
+            "hopping_voltage_v": {"initial": 0.48, "bounds": [0.2, 0.7]},
+            "conductivity_s_m": {"initial": 7e5, "bounds": [2e5, 3e6]},
+        }
+        blocks = [
+            {
+                "name": "hrs",
+                "dataset": "HRS",
+                "residual": "asinh",
+                "current_scale_a": 1e-6,
+            },
+            {
+                "name": "lrs",
+                "dataset": "LRS",
+                "residual": "linear",
+                "current_scale_a": 1e-3,
+            },
+        ]
+        settings = {
+            "parameters": specs,
+            "residual_blocks": blocks,
+            "gtol": 1e-11,
+            "jacobian_step_fraction": 5e-5,
+            "joint_parameters": ["hopping_density_a_m2", "conductivity_s_m"],
+            "stages": [
+                {
+                    "name": "hrs",
+                    "parameters": list(specs)[:2],
+                    "residual_blocks": blocks[:1],
+                    "global_search": {"seed": 7, "maxiter": 2, "popsize": 3},
+                },
+                {
+                    "name": "lrs",
+                    "parameters": ["conductivity_s_m"],
+                    "residual_blocks": blocks[1:],
+                },
+            ],
+        }
+        fitted, report = fit_parameters(truth, datasets, settings)
+        self.assertEqual([s["name"] for s in report["stages"]], ["hrs", "lrs", "joint"])
+        self.assertGreater(report["stages"][0]["global_search"]["nfev"], 0)
+        self.assertIn("hopping_voltage_v", report["profiled_parameters"])
+        self.assertEqual(report["calibrated_parameters"], list(specs))
+        self.assertLess(
+            report["final_squared_residual"], report["initial_squared_residual"] * 1e-6
+        )
+        for name in specs:
+            self.assertAlmostEqual(
+                getattr(fitted, name) / getattr(truth, name), 1, places=2
+            )
+        with self.assertRaisesRegex(ValueError, "全部原始测点"):
+            fit_parameters(truth, datasets, {**settings, "residual_blocks": blocks[:1]})
+        with tempfile.TemporaryDirectory() as directory:
+            summary = export_results(
+                directory, fitted, datasets, report=report, plot=False
+            )
+            self.assertEqual(summary["datasets"]["HRS"]["regions"]["hrs"]["n"], 5)
+            self.assertLess(summary["datasets"]["LRS"]["rmse_a"], 1e-8)
 
     def test_invalid_fit_bound_is_rejected(self):
         dataset = Dataset("s", [0], [0], None, "static", State())

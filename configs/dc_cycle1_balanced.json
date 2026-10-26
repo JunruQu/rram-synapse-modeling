@@ -1,0 +1,282 @@
+{
+  "description": "Cycle 1 balanced staged calibration. J0/VT constrain HRS and Ea/alpha/radial_shell constrain SET position and width; Rth fixed at accepted baseline. All 404 points included. Geometry and radial scale bounds are conditional, not independently measured.",
+  "parameters": {
+    "thickness_m": 5e-09,
+    "filament_max_m": 5e-09,
+    "seed_diameter_m": 5e-10,
+    "atomic_step_m": 2.5e-10,
+    "attempt_hz": 10000000000000.0,
+    "charge_number": 2.0,
+    "generation_ev": 1.09373147839685,
+    "hopping_ev": 1.0,
+    "release_ev": 1.2,
+    "recombination_ev": 0.6875502449182563,
+    "generation_alpha_m": 3e-10,
+    "hopping_alpha_m": 7.5e-10,
+    "release_gamma": 0.3714897629261796,
+    "radial_shell_m": 5e-10,
+    "conductivity_s_m": 7732.621699342788,
+    "conduction_ev": 0.1,
+    "hopping_density_a_m2": 4781130034408.307,
+    "hopping_length_m": 4e-10,
+    "hopping_voltage_v": 0.688131642604877,
+    "ambient_k": 300.0,
+    "thermal_k_w": 5000,
+    "series_ohm": 40.0,
+    "parallel_ohm": null,
+    "set_polarity": 1,
+    "temperature_limit_k": 3000.0
+  },
+  "datasets": [
+    {
+      "name": "Measured cycle 1",
+      "path": "../data/dc/prepared/cycle1_prepared.csv",
+      "mode": "dynamic",
+      "state": {
+        "x_m": 1e-09,
+        "w_m": 5e-10,
+        "x0_m": 1e-09
+      },
+      "compliance_a": 0.001,
+      "compliance_mode": "set"
+    }
+  ],
+  "solver": {
+    "rtol": 1e-05,
+    "atol_m": 1e-15
+  },
+  "fit": {
+    "parameters": {
+      "hopping_density_a_m2": {
+        "initial": 4781130034408.307,
+        "bounds": [
+          1000000000000.0,
+          30000000000000.0
+        ],
+        "log": true
+      },
+      "hopping_voltage_v": {
+        "initial": 0.688131642604877,
+        "bounds": [
+          0.25,
+          1.2
+        ],
+        "log": true
+      },
+      "conductivity_s_m": {
+        "initial": 7732.621699342788,
+        "bounds": [
+          4000.0,
+          100000.0
+        ],
+        "log": true
+      },
+      "generation_ev": {
+        "initial": 1.09373147839685,
+        "bounds": [
+          0.7,
+          2.5
+        ],
+        "log": false
+      },
+      "generation_alpha_m": {
+        "initial": 3e-10,
+        "bounds": [
+          2e-10,
+          9e-10
+        ],
+        "log": true
+      },
+      "recombination_ev": {
+        "initial": 0.6875502449182563,
+        "bounds": [
+          0.64,
+          0.72
+        ],
+        "log": false
+      },
+      "release_gamma": {
+        "initial": 0.3714897629261796,
+        "bounds": [
+          0.25,
+          0.5
+        ],
+        "log": true
+      },
+      "radial_shell_m": {
+        "initial": 5e-10,
+        "bounds": [
+          1e-10,
+          5e-09
+        ],
+        "log": true
+      }
+    },
+    "residual_blocks": [
+      {
+        "name": "full_cycle",
+        "dataset": "Measured cycle 1",
+        "start": 0,
+        "stop": 404,
+        "residual": "linear",
+        "current_scale_a": 0.001,
+        "weight": 4
+      },
+      {
+        "name": "positive_hrs",
+        "dataset": "Measured cycle 1",
+        "start": 0,
+        "stop": 44,
+        "residual": "asinh",
+        "current_scale_a": 1e-06,
+        "weight": 0.25
+      },
+      {
+        "name": "set_transition",
+        "dataset": "Measured cycle 1",
+        "start": 35,
+        "stop": 50,
+        "residual": "linear",
+        "current_scale_a": 0.001,
+        "weight": 1
+      },
+      {
+        "name": "return_lrs",
+        "dataset": "Measured cycle 1",
+        "start": 160,
+        "stop": 240,
+        "residual": "linear",
+        "current_scale_a": 0.001,
+        "weight": 0.5
+      },
+      {
+        "name": "reset_and_hrs",
+        "dataset": "Measured cycle 1",
+        "start": 240,
+        "stop": 404,
+        "residual": "linear",
+        "current_scale_a": 0.001,
+        "weight": 1
+      }
+    ],
+    "initialization_points": 0,
+    "max_nfev": 50,
+    "xtol": 1e-07,
+    "ftol": 1e-07,
+    "gtol": 1e-08,
+    "stages": [
+      {
+        "name": "hrs_conduction",
+        "parameters": [
+          "hopping_density_a_m2",
+          "hopping_voltage_v"
+        ],
+        "residual_blocks": [
+          {
+            "name": "low_field_hrs",
+            "dataset": "Measured cycle 1",
+            "start": 0,
+            "stop": 36,
+            "residual": "asinh",
+            "current_scale_a": 1e-06,
+            "weight": 1
+          }
+        ],
+        "max_nfev": 35
+      },
+      {
+        "name": "set_kinetics",
+        "parameters": [
+          "generation_ev",
+          "generation_alpha_m",
+          "radial_shell_m"
+        ],
+        "residual_blocks": [
+          {
+            "name": "positive_hrs",
+            "dataset": "Measured cycle 1",
+            "start": 0,
+            "stop": 44,
+            "residual": "asinh",
+            "current_scale_a": 1e-06,
+            "weight": 0.25
+          },
+          {
+            "name": "set_transition",
+            "dataset": "Measured cycle 1",
+            "start": 35,
+            "stop": 50,
+            "residual": "linear",
+            "current_scale_a": 0.001,
+            "weight": 1
+          }
+        ],
+        "global_search": {
+          "maxiter": 35,
+          "popsize": 8,
+          "seed": 17
+        },
+        "max_nfev": 40
+      },
+      {
+        "name": "lrs_conduction",
+        "parameters": [
+          "conductivity_s_m"
+        ],
+        "residual_blocks": [
+          {
+            "name": "return_lrs",
+            "dataset": "Measured cycle 1",
+            "start": 160,
+            "stop": 240,
+            "residual": "linear",
+            "current_scale_a": 0.001,
+            "weight": 0.25
+          }
+        ],
+        "initialization_points": 7,
+        "max_nfev": 35
+      },
+      {
+        "name": "reset_kinetics",
+        "parameters": [
+          "recombination_ev",
+          "release_gamma"
+        ],
+        "residual_blocks": [
+          {
+            "name": "reset_and_hrs",
+            "dataset": "Measured cycle 1",
+            "start": 240,
+            "stop": 404,
+            "residual": "linear",
+            "current_scale_a": 0.001,
+            "weight": 0.5
+          }
+        ],
+        "initialization_points": 0,
+        "max_nfev": 40,
+        "global_search": {
+          "maxiter": 18,
+          "popsize": 6,
+          "seed": 17
+        }
+      }
+    ],
+    "jacobian_step_fraction": 5e-05,
+    "joint_parameters": [
+      "hopping_density_a_m2",
+      "hopping_voltage_v",
+      "conductivity_s_m",
+      "recombination_ev",
+      "release_gamma"
+    ],
+    "set_coordinates": {
+      "reference_field_v_m": 870000000.0,
+      "barrier_bounds_ev": [
+        0.45,
+        0.8
+      ]
+    }
+  }
+}

@@ -1,0 +1,195 @@
+{
+  "manifest": "configs/accepted_pulse_fits.json",
+  "initial_conductance_target_s": 8.5e-05,
+  "observation_prior": {
+    "delay_ns": 14.5,
+    "response_ns": 7.352863995975265,
+    "capacitance_pf": 5.394015491627448,
+    "relative_scale": 0.2
+  },
+  "reproduction_tolerances": {
+    "key_metric_relative": 0.05,
+    "waveform_rmse_over_measured_peak": 0.02
+  },
+  "results": [
+    {
+      "source": "pulse_iv_500ns_HiRes.csv",
+      "output": "500ns_hires",
+      "candidate_directory": "/tmp/rram-pulse-unified-candidates-20261027/500ns_hires",
+      "optimizer_success": true,
+      "read_mean_relative_change": [
+        -0.0012104167682752771,
+        -0.0001754006376269476
+      ],
+      "set_reset_peak_relative_change": {
+        "set": 0.023308487909940556,
+        "reset": 0.2051763716573145
+      },
+      "prediction_difference_rmse_a": 2.9858586454569092e-05,
+      "prediction_difference_rmse_over_measured_peak": 0.028289011393573097,
+      "tolerances": {
+        "key_metric_relative": 0.05,
+        "waveform_rmse_over_measured_peak": 0.02
+      },
+      "passed": false,
+      "adopted": true
+    },
+    {
+      "source": "pulse_iv_200ns_HiRes.csv",
+      "output": "200ns_hires",
+      "candidate_directory": "/tmp/rram-pulse-unified-candidates-20261027/200ns_refit/200ns_hires",
+      "optimizer_success": true,
+      "read_mean_relative_change": [
+        0.0008910404784901734,
+        0.001588621223582218
+      ],
+      "set_reset_peak_relative_change": {
+        "set": 0.023999528147419902,
+        "reset": 0.29679813321420423
+      },
+      "prediction_difference_rmse_a": 3.113124705370895e-05,
+      "prediction_difference_rmse_over_measured_peak": 0.034042434894848136,
+      "tolerances": {
+        "key_metric_relative": 0.05,
+        "waveform_rmse_over_measured_peak": 0.02
+      },
+      "passed": false,
+      "adopted": true
+    },
+    {
+      "source": "pulse_iv_100ns_HiRes.csv",
+      "output": "100ns_hires",
+      "candidate_directory": "/tmp/rram-pulse-unified-candidates-20261027/100ns_refit/100ns_hires",
+      "optimizer_success": true,
+      "read_mean_relative_change": [
+        -0.00123416675363357,
+        -0.0023216280981016926
+      ],
+      "set_reset_peak_relative_change": {
+        "set": -0.014620613872935229,
+        "reset": 0.494690946401102
+      },
+      "prediction_difference_rmse_a": 5.880163470073919e-05,
+      "prediction_difference_rmse_over_measured_peak": 0.05939559060680726,
+      "tolerances": {
+        "key_metric_relative": 0.05,
+        "waveform_rmse_over_measured_peak": 0.02
+      },
+      "passed": false,
+      "adopted": true
+    },
+    {
+      "source": "pulse_iv_20ns_HiRes.csv",
+      "output": "20ns_hires",
+      "candidate_directory": "/tmp/rram-pulse-unified-candidates-20261027/20ns_hires",
+      "optimizer_success": false,
+      "read_mean_relative_change": [
+        -2.2149694869711773e-05,
+        0.0002586744369446479
+      ],
+      "set_reset_peak_relative_change": {
+        "set": 0.49043410613839855,
+        "reset": 0.7861976693605226
+      },
+      "prediction_difference_rmse_a": 8.33043164474045e-05,
+      "prediction_difference_rmse_over_measured_peak": 0.06163188548033972,
+      "tolerances": {
+        "key_metric_relative": 0.05,
+        "waveform_rmse_over_measured_peak": 0.02
+      },
+      "passed": false,
+      "adopted": true
+    },
+    {
+      "source": "pulse_iv_10ns_HiRes.csv",
+      "output": "10ns_hires",
+      "candidate_directory": "/tmp/rram-pulse-unified-candidates-20261027/10ns_peak_refit/10ns_hires",
+      "optimizer_success": true,
+      "read_mean_relative_change": [
+        0.01151877225486936,
+        -0.04656093835152824
+      ],
+      "set_reset_peak_relative_change": {
+        "set": -0.016275567714003847,
+        "reset": 0.006988851863565015
+      },
+      "prediction_difference_rmse_a": 1.7550668613484866e-05,
+      "prediction_difference_rmse_over_measured_peak": 0.012720862075335357,
+      "tolerances": {
+        "key_metric_relative": 0.05,
+        "waveform_rmse_over_measured_peak": 0.02
+      },
+      "passed": true,
+      "adopted": true
+    },
+    {
+      "source": "pulse_iv_5ns_HiRes.csv",
+      "output": "5ns_hires",
+      "candidate_directory": "/tmp/rram-pulse-unified-candidates-20261027/5ns_peak_refit/5ns_hires",
+      "optimizer_success": false,
+      "read_mean_relative_change": [
+        -0.005100572252126273,
+        0.034087272220734294
+      ],
+      "set_reset_peak_relative_change": {
+        "set": 0.18957848324811644,
+        "reset": 0.34721914377037977
+      },
+      "prediction_difference_rmse_a": 2.775230108069998e-05,
+      "prediction_difference_rmse_over_measured_peak": 0.020928374396577517,
+      "tolerances": {
+        "key_metric_relative": 0.05,
+        "waveform_rmse_over_measured_peak": 0.02
+      },
+      "passed": false,
+      "adopted": true
+    },
+    {
+      "source": "pulse_iv_2ns_HiRes.csv",
+      "output": "2ns_hires",
+      "candidate_directory": "/tmp/rram-pulse-unified-candidates-20261027/2ns_peak_refit/2ns_hires",
+      "optimizer_success": false,
+      "read_mean_relative_change": [
+        -0.008140770653428482,
+        -0.01092247388552469
+      ],
+      "set_reset_peak_relative_change": {
+        "set": -0.048366045917723754,
+        "reset": -0.12486849396613187
+      },
+      "prediction_difference_rmse_a": 2.101996173310719e-05,
+      "prediction_difference_rmse_over_measured_peak": 0.01907445748279098,
+      "tolerances": {
+        "key_metric_relative": 0.05,
+        "waveform_rmse_over_measured_peak": 0.02
+      },
+      "passed": false,
+      "adopted": true
+    },
+    {
+      "source": "pulse_iv_1ns_HiRes.csv",
+      "output": "1ns_hires",
+      "candidate_directory": "/tmp/rram-pulse-unified-candidates-20261027/1ns_peak_refit/1ns_hires",
+      "optimizer_success": true,
+      "read_mean_relative_change": [
+        0.004037992444795836,
+        0.0034915698691208898
+      ],
+      "set_reset_peak_relative_change": {
+        "set": -0.060026394785715254,
+        "reset": -0.060315731640161574
+      },
+      "prediction_difference_rmse_a": 1.5647289671343977e-05,
+      "prediction_difference_rmse_over_measured_peak": 0.013876909375627598,
+      "tolerances": {
+        "key_metric_relative": 0.05,
+        "waveform_rmse_over_measured_peak": 0.02
+      },
+      "passed": false,
+      "adopted": true
+    }
+  ],
+  "all_reproduced": false,
+  "all_user_adopted": true,
+  "adoption_basis": "用户接受全部统一拟合候选；复现容差用于对照旧曲线，不再作为保留候选的门槛。"
+}

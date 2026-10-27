@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "description": "逐条拟合 HiRes 已采纳的八组 SET-READ-RESET-READ 曲线；共用求解/优化实现，不进行跨脉宽联合拟合。",
+  "cleanup_unlisted_outputs": true,
+  "initial_conductance_target_us": 85.0,
+  "initial_conductance_relative_scale": 0.2,
+  "observation_prior": {
+    "delay_ns": 14.5,
+    "response_ns": 7.352863995975265,
+    "capacitance_pf": 5.394015491627448,
+    "relative_scale": 0.2
+  },
+  "fits": [
+    {
+      "source": "pulse_iv_500ns_HiRes.csv",
+      "output": "500ns_hires",
+      "seed_config": "outputs/pulse/500ns_hires/fit_config.json",
+      "calibration_mode": "waveform",
+      "optimizer_grid_ns": 1.0,
+      "max_nfev": 60,
+      "stage_max_nfev": {
+        "read_priority": 12,
+        "reset_priority": 15,
+        "set_priority": 12
+      }
+    },
+    {
+      "source": "pulse_iv_200ns_HiRes.csv",
+      "output": "200ns_hires",
+      "seed_config": "outputs/pulse/200ns_hires/fit_config.json",
+      "calibration_mode": "waveform",
+      "optimizer_grid_ns": 0.5,
+      "max_nfev": 60,
+      "stage_max_nfev": {
+        "read_priority": 8,
+        "reset_priority": 10,
+        "set_priority": 12
+      }
+    },
+    {
+      "source": "pulse_iv_100ns_HiRes.csv",
+      "output": "100ns_hires",
+      "seed_config": "outputs/pulse/100ns_hires/fit_config.json",
+      "calibration_mode": "waveform",
+      "optimizer_grid_ns": 1.0,
+      "max_nfev": 60,
+      "stage_max_nfev": {
+        "read_priority": 12,
+        "reset_priority": 30,
+        "set_priority": 12
+      }
+    },
+    {
+      "source": "pulse_iv_20ns_HiRes.csv",
+      "output": "20ns_hires",
+      "seed_config": "outputs/pulse/20ns_hires/fit_config.json",
+      "calibration_mode": "waveform",
+      "optimizer_grid_ns": 0.5,
+      "max_nfev": 60,
+      "stage_max_nfev": {
+        "read_priority": 12,
+        "reset_priority": 12,
+        "set_priority": 12
+      }
+    },
+    {
+      "source": "pulse_iv_10ns_HiRes.csv",
+      "output": "10ns_hires",
+      "seed_config": "outputs/pulse/10ns_hires/fit_config.json",
+      "calibration_mode": "narrow_peaks",
+      "optimizer_grid_ns": 0.5,
+      "max_nfev": 40,
+      "stage_max_nfev": {
+        "read_priority": 10,
+        "peak_priority": 15
+      }
+    },
+    {
+      "source": "pulse_iv_5ns_HiRes.csv",
+      "output": "5ns_hires",
+      "seed_config": "outputs/pulse/5ns_hires/fit_config.json",
+      "calibration_mode": "narrow_peaks",
+      "optimizer_grid_ns": 0.5,
+      "max_nfev": 45,
+      "stage_max_nfev": {
+        "read_priority": 10,
+        "peak_priority": 15
+      }
+    },
+    {
+      "source": "pulse_iv_2ns_HiRes.csv",
+      "output": "2ns_hires",
+      "seed_config": "outputs/pulse/2ns_hires/fit_config.json",
+      "calibration_mode": "narrow_peaks",
+      "optimizer_grid_ns": 0.125,
+      "max_nfev": 25,
+      "stage_max_nfev": {
+        "read_priority": 10,
+        "peak_priority": 12
+      }
+    },
+    {
+      "source": "pulse_iv_1ns_HiRes.csv",
+      "output": "1ns_hires",
+      "seed_config": "outputs/pulse/1ns_hires/fit_config.json",
+      "calibration_mode": "narrow_peaks",
+      "optimizer_grid_ns": 0.5,
+      "max_nfev": 45,
+      "stage_max_nfev": {
+        "read_priority": 10,
+        "peak_priority": 20
+      }
+    }
+  ]
+}

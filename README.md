@@ -16,15 +16,18 @@ DC cycle 1 使用分区混合目标和分阶段参数校准，最终细化覆盖
 
 | 数据 | 结果目录 | 全记录电流 RMSE |
 | --- | --- | ---: |
-| DC cycle 1 | `outputs/dc/cycle1/` | 46.48 μA |
+| DC cycle 1 balanced | `outputs/dc/cycle1_balanced/` | 45.66 μA |
+| DC cycle 1 原接受结果 | `outputs/dc/cycle1/` | 46.48 μA |
 | HiRes 1 ns | `outputs/pulse/1ns_hires/` | 32.18 μA |
 | HiRes 2 ns | `outputs/pulse/2ns_hires/` | 34.23 μA |
 | HiRes 5 ns | `outputs/pulse/5ns_hires/` | 49.04 μA |
 | HiRes 10 ns | `outputs/pulse/10ns_hires/` | 48.20 μA |
-| HiRes 20 ns | `outputs/pulse/20ns_hires/` | 73.75 μA |
+| HiRes 20 ns | `outputs/pulse/20ns_hires/` | 67.08 μA |
 | HiRes 100 ns | `outputs/pulse/100ns_hires/` | 67.32 μA |
 | HiRes 200 ns | `outputs/pulse/200ns_hires/` | 37.36 μA |
 | HiRes 500 ns | `outputs/pulse/500ns_hires/` | 41.59 μA |
+
+20 ns 于 2026-10-28 按用户接受的单参数扫描将 `generation_ev` 更新为 1.97809 eV；保存的全点预测使用 0.125 ns 网格及 rtol=1e-4。该调整不是重新拟合。
 
 各 HiRes 目录保存参数、拟合配置、全采样预测、对比图、指标报告和瞬态选项。各脉宽的 READ 与峰值指标见对应 `report.json`。拟合参数为单条件校准值，不代表唯一可辨识的材料常数，也未验证跨脉宽预测能力。
 
@@ -48,4 +51,6 @@ uv run python fit_pulse.py fit-batch \
   --output /tmp/rram-pulse-candidates
 ```
 
-单曲线重拟合应写入独立目录，避免覆盖接受基线。`fit_pulse.py validate` 和 `fit_dc.py validate` 用于固定参数下的数值检查，不等同于重新拟合或实验验证。
+单曲线重拟合应写入独立目录，避免覆盖接受基线。批量拟合是重新优化，不会自动复现 20 ns 已接受的单参数调整；固定参数重放应使用该目录中 `fit_config.json` 的最终坐标、`final_prediction_grid_s` 和 `rtol`。`fit_pulse.py validate` 和 `fit_dc.py validate` 用于固定参数下的数值检查，不等同于重新拟合或实验验证。
+
+用户已决定暂停共享器件参数联合拟合；已清理相关尝试，失败记录见 [DEBUG_HISTORY.log](DEBUG_HISTORY.log)。

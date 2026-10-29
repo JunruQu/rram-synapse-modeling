@@ -1,5 +1,6 @@
 """数据与 CLI 无依赖测试；真实最小二乘测试在 NumPy/SciPy 可用时执行。"""
 
+import csv
 import importlib.util
 import json
 import math
@@ -29,6 +30,30 @@ HAS_SCIPY = (
 
 
 class DataTests(unittest.TestCase):
+    def test_accepted_balanced_dc_fixed_parameter_replay(self):
+        root = Path(__file__).resolve().parents[1]
+        folder = root / "outputs/dc/cycle1_balanced"
+        config = json.loads((folder / "config_used.json").read_text())
+        config["datasets"][0]["path"] = str(
+            root / "data/dc/prepared/cycle1_prepared.csv"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.json"
+            config_path.write_text(json.dumps(config))
+            loaded, params, datasets = load_config(config_path)
+        points, _ = predict(params, datasets[0], loaded["solver"])
+        with (folder / "prediction.csv").open(newline="") as stream:
+            saved = list(csv.DictReader(stream))
+        self.assertEqual(len(points), 404)
+        self.assertEqual(len(saved), len(points))
+        self.assertLessEqual(
+            max(
+                abs(point.current_a - float(row["predicted_a"]))
+                for point, row in zip(points, saved, strict=True)
+            ),
+            1e-12,
+        )
+
     def test_csv_preserves_scan_order_and_explicit_timing(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "curve.csv"

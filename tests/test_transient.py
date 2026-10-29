@@ -1,5 +1,6 @@
 """瞬态物理极限、单位换算及时间重建的回归测试。"""
 
+import json
 import math
 import tempfile
 import unittest
@@ -525,6 +526,30 @@ class PulseDataTests(unittest.TestCase):
         self.assertEqual(direct.points, delayed.points)
         np.testing.assert_array_equal(direct.capacitive_a, delayed.capacitive_a)
         self.assertFalse(np.array_equal(a, b))
+
+    def test_accepted_20ns_fixed_parameter_replay(self):
+        root = Path(__file__).resolve().parents[1]
+        folder = root / "outputs/pulse/20ns_hires"
+        config = json.loads((folder / "fit_config.json").read_text())
+        with tempfile.TemporaryDirectory() as tmp:
+            data, audit = prepare(root / "data/pulse", tmp, ["pulse_iv_20ns_HiRes.csv"])
+        self.assertEqual(audit["files"][0]["source_sha256"], config["source_sha256"])
+        datum = data[0]
+        predicted, _, _ = predict(
+            datum,
+            np.asarray(config["final_coordinates"]),
+            Parameters(**config["reference_parameters"]),
+            State(**config["initial_state"]),
+            grid_s=config["final_prediction_grid_s"],
+            rtol=config["rtol"],
+            current_delay_s=config["current_delay_s"],
+            initial_observed_a=config["observation_initial_current_a"],
+            charge_conserving_capacitance=config["charge_conserving_capacitance"],
+        )
+        saved = np.genfromtxt(folder / "prediction.csv", delimiter=",", names=True)
+        self.assertEqual(len(predicted), 25000)
+        np.testing.assert_array_equal(datum.time_s, saved["time_s"])
+        np.testing.assert_allclose(predicted, saved["predicted_a"], rtol=0, atol=1e-12)
 
     def test_prediction_preserves_drive_knots_and_does_not_use_observed_current(self):
         t = np.array([25e-9, 75e-9, 125e-9])

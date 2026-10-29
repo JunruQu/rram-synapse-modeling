@@ -18,6 +18,14 @@ __pycache__/
 !/outputs/dc/cycle1/parameters.json
 !/outputs/dc/cycle1/prediction.csv
 !/outputs/dc/cycle1/report.json
+!/outputs/dc/cycle1_balanced/
+/outputs/dc/cycle1_balanced/*
+!/outputs/dc/cycle1_balanced/config_used.json
+!/outputs/dc/cycle1_balanced/comparison.png
+!/outputs/dc/cycle1_balanced/parameters.json
+!/outputs/dc/cycle1_balanced/prediction.csv
+!/outputs/dc/cycle1_balanced/report.json
+!/outputs/dc/cycle1_balanced/numerical_validation.json
 !/outputs/pulse/
 /outputs/pulse/*
 

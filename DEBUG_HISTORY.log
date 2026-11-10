@@ -218,3 +218,119 @@ READ 平台门槛在 1/2/5/10 ns 四组通过，20/100/200 ns 三组未通过；
 - 八组共享拟合的初始有限差分检查中，相邻步长最大导数差异约 49.47%–83.99%，超过当次 20% 检查门槛；1 ns 起点附近的细微扰动可使间隙闭合状态改变，故按当次方案在拟合前停止。随后 COBYQA 无导数两阶段各达到 60 次评价上限、均未收敛，八组均未同时达到上述诊断目标；200 ns 初态间隙贴 x0 上界。代表性半步长检查通过，不等同于优化收敛。
 - 时序对齐与宽窄分阶段方案中，READ-LRS 50% 边沿表观时差中位数 20.48 ns，扣除一阶响应的阶跃近似后得到 15.38 ns 初始有效延迟，均非独立路径标定。100/200/500 ns 独立拟合、三组共享拟合及八组共享拟合均在各自 60 次评价上限停止、未收敛。最终八组均未同时达到 READ 5% 与峰值 15%；100 ns READ-LRS 误差 −70.58%。宽组共享到八组共享的 SET 前 100 ns RMSE：100 ns 131.25→228.36 μA，200 ns 211.47→90.72 μA，500 ns 162.78→64.73 μA。八组全节点/半步长、稀疏网格和固定参数重放通过，不能据此宣称拟合准确。
 - 上述尝试代码、配置与候选输出依用户要求清除；保留已接受的脉冲基线、DC cycle1 与 cycle1_balanced，以及原始与准备数据。器件身份、初态和测量通道仍需独立证据；当前暂停统一参数联合拟合，不将此次失败外推为不可行证明。
+
+
+## 2026-11-09：LTP/LTD探索、失败路径与清理归档
+
+以下为清理前CONTEXT中的历史记录；其中旧输出路径仅用于说明来源，已删除，不是当前入口。
+
+## 多脉冲外推（2026-11-09）
+
+已实现 `uv run python simulate_ltp.py`：100/10/1 ns 分别每阶段写入10/100/1000次，先SET后RESET，每阶段真实READ十次。周期2 μs，写入±电压为+1.2/−1.3 V；READ为0.2 V、500 ns半高宽、50 ns边沿。零偏解析冷却，结果独立保存于 `outputs/ltp_ltd/`。逐脉冲电导为周期结束虚拟读出，真实READ另存。三组步长减半及容差收紧对照通过；基准耗时约0.08/0.41/4.19秒（本机）。温度峰值为输出节点估计，非内部所有接受步的严格最大值。结果为条件参数外推，非实验验证；x为间隙、w为直径。
+
+### 固定10 ns参数跨脉宽对照（2026-11-09）
+
+运行 `uv run python simulate_ltp.py --reference-width 10`，参数、初态、热时间常数全部固定为10 ns接受值，其余沿用2 μs周期及每阶段十次READ协议。结果位于 `outputs/ltp_ltd_fixed_10ns/`，不覆盖独立参数结果。写入网格加密后，三组状态、电导、采样温度峰值均通过收敛对照。100 ns SET首次饱和；10 ns渐进后饱和；1 ns SET变化小、RESET读出几乎无变化，不支持双向线性度随脉宽降低而改善。
+
+### 连续LTP→LTD与共同100 μS初态（2026-11-09）
+
+`uv run python simulate_ltp.py --reference-width 10 --initial-conductance-us 100 --output outputs/ltp_ltd_fixed_10ns_g100` 固定10 ns参数及初始直径/历史尺度，由300 K、0.2 V下100 μS反解共同初始间隙。保存两阶段P=0，RESET P=0严格继承SET最终几何、温度及电导；图横轴为连续累计脉冲数。真实READ采样值因读出温度不同，与周期结束虚拟电导分开显示。旧计算本身已连续继承状态，但未显示阶段P=0，不能用首次RESET后的READ值代表RESET初态。本轮三组收敛检查均通过。
+
+### 当前多脉冲方案：独立参数、共同初始电导（2026-11-09）
+
+按用户要求停止以固定10 ns参数作为当前方案。运行 `uv run python simulate_ltp.py --initial-conductance-us 100 --output outputs/ltp_ltd_individual_g100`，100/10/1 ns分别加载各自已接受的参数及热时间常数；保留各组初始直径和历史尺度，反解间隙使初始电导均为100 μS。RESET连续继承SET终态，时序保持2 μs周期、每阶段十次READ。三组数值收敛通过，参数来源、共同初始电导和阶段连续性均已核验。1 ns仍首次SET饱和（约483.15 μS），RESET几乎无变化；切回独立参数未解决该物理预测问题。保留旧目录作对照，不覆盖接受基线。
+
+### 实测LTP/LTD定性拟合入口（2026-11-09）
+
+新增 `uv run python fit_ltp.py`，结果独立保存于 `outputs/ltp_ltd_fit/`。原始数据不改写，带表头副本、SHA256审计和逐周期负向READ电导位于各脉宽子目录。实际SET/RESET次数为50/50、500/500、1000/1000；每周期均执行−0.4 V READ，不能沿用此前稀疏READ模拟。拟合连续保留状态，以少量动力学及传导参数拟合趋势，初态不强制100 μS。1 ns写入波形依赖已确认设定和vsense插值重建，须报告重建不确定性。首轮100/10 ns误差约65%/39%，尚未达到20%目标，不是已接受拟合基线。分阶段参数释放、1 ns波形敏感性及最终物理可辨识性检查仍待完成，不得将优化器success作为校准完成。
+
+实测首轮三组候选已生成：100/10/1 ns范围归一化RMSE约65%/39%/29%，均未达到20%工作目标。1 ns生成能垒接近2.2 eV上界、释放能垒接近0.6 eV下界，不能作为可靠材料参数。当前代码含三初值搜索；首轮报告不含完整波形重建敏感性，现阶段结果仅为诊断候选。
+
+### READ趋势优先（2026-11-09）
+
+按用户要求，`fit_ltp.py`改为每阶段20个READ窗口中位趋势残差，不拟合SET/RESET瞬态电流；原始逐脉冲值完整保留。优化ftol/xtol放宽至0.03，数值及物理边界不放宽。趋势验收要求方向正确且首尾10%窗口中位变化量为实测的0.5–2倍；20%逐点RMSE仅保留为诊断，不再是通过门槛。此阈值是工程判据，非实验不确定度。原候选需按新目标重新拟合，不能因放宽要求直接接受100/1 ns的近乎平坦SET。
+
+### READ趋势拟合实际结果（2026-11-09）
+
+已完成三组基础趋势拟合及场增强/复合能垒受限释放对照。汇总图及诊断见 `outputs/ltp_ltd_read_trend/comparison.png`、`summary.json`。100 ns选扩展候选，归一化RMSE约18%，趋势较合理但释放能垒贴近下界；10 ns保留基础候选（约39%），方向及变化量通过宽松判据，但LTD下降过快、终值偏低；1 ns基础和扩展均约29%，电导变化近乎为零，趋势失败。所有候选数值复算通过。不能仅凭较低RMSE或优化器success接受1 ns结果，未更新接受基线。扩展复现：`uv run python fit_ltp.py --extended --width 100 --max-nfev 12 --output outputs/ltp_ltd_read_trend_extended`；10/1 ns扩展各使用8次评价预算，基础三组使用20次。后续仍需1 ns输入重建敏感性及可辨识性分析。
+
+### 更新实验数据的平均READ拟合（2026-11-09）
+
+已确认三组原始CSV SHA256全部更新；按平均电流/平均器件电压定义重新拟合，输出 `outputs/ltp_ltd_mean_read_updated/`，不覆盖已接受基线。复现：`uv run python fit_ltp.py --extended --max-nfev 12 --output outputs/ltp_ltd_mean_read_updated`。100/10/1 ns范围归一化RMSE约14.4%/11.2%/14.9%，三组数值复算均通过。100及10 ns通过宽松趋势判据；100 ns生成能垒接近2.2 eV上界且早期点有偏差；10 ns达到评价预算。1 ns已恢复明显LTD（变化量约实测82%），但LTP初始电导偏高、增幅仅实测32%，仍未通过完整趋势判据。参数仍在预设边界内，不宣称唯一可辨识。汇总图见comparison.png、诊断见summary.json。READ提取改为按周期切片，已逐值验证三组与原提取实现一致；60项测试及Ruff检查通过。后续重点为1 ns初态/几何可辨识性和写入波形重建敏感性，不通过放宽验收隐藏LTP偏差。
+
+### 1 ns首周期debug（2026-11-09）
+
+`uv run python debug_ltp_first.py` 输出 `outputs/ltp_ltd_first_cycle_debug/`。固定新数据拟合参数重放：初始虚拟G约105 μS，SET上升沿约92.5 ps闭合0.583 nm间隙，直径仅2.500→2.502 nm；READ约478 μS而实测159 μS。细化结果几乎一致；无SET约107 μS，实际READ电压替换约482 μS，初始直径1 nm约200 μS（此改动同时改变初态电导，仅为敏感性试验）。首周期起点偏高主要源于间隙过早闭合与固定初始几何，READ扰动和冷却不是主因。发现并修复目标函数把第一窗口中位数当作首READ约束的问题，新增显式首末READ残差及回归测试；尚未按修复后的目标重新全局拟合，旧候选未覆盖。SET真实边沿欠采样，测量通道电流与模型导电电流不能直接等同。
+
+### 1 ns第一条路径：慢SET搜索（2026-11-09）
+
+已实现 `uv run python fit_ltp.py --extended --width 1 --slow-set --max-nfev 20 --output outputs/ltp_ltd_1ns_slow_set`，初始直径仍固定2.5 nm；提高生成能垒、降低场增强，首周期筛选及全序列代价选择初值，并显式约束前2/3/5/10/20次READ。结果：Ea约2.173 eV、alpha约0.285 nm；首周期末间隙约0.265 nm，首READ约157.29 μS，实测158.51 μS。原优化网格未通过收敛对照；`uv run python validate_ltp_slow.py` 固定参数细化后，rtol=1e-4/3e-5/1e-5均在约第22脉冲发生突变，后两次差异通过检查。首周期改善，但整个LTP仍是延迟突变后平台，不是合理渐进更新；不采纳为基线。输出位于 `outputs/ltp_ltd_1ns_slow_set/1ns/`，详见path1_summary.json和validation.png。初态也是拟合变量，不是独立实测；62项测试及Ruff通过。
+
+### 1 ns薄细丝初态拟合（2026-11-09）
+
+已运行 `uv run python fit_ltp.py --extended --width 1 --fit-initial-width --max-nfev 20 --output outputs/ltp_ltd_1ns_thin_filament`，不强制间隙保持打开。初始有效直径在0.5–2.5 nm内拟合，结果约0.829 nm；首次SET闭合间隙，直径约0.829→0.833 nm，随后LTP逐渐扩径至4.979 nm。首READ约171 μS（实测159 μS），范围归一化RMSE约6.9%，LTP/LTD均通过定性判据，参数不贴边，数值复算通过。相同材料参数和器件端波形下只把初始直径改回2.5 nm，首READ升至约495 μS；对照未重新拟合。输出见 `outputs/ltp_ltd_1ns_thin_filament/1ns/fit.png`、`mechanism_comparison.png`及`mechanism_summary.json`。这支持模型内快速闭合后扩径的可行解释，不是实际亚纳米形貌或脉宽因果关系的证明；RESET阶段几何仍按原模型只改变间隙。63项测试、Ruff通过，未覆盖已接受基线。后续可辨识性与独立条件验证仍待完成。
+
+
+### 本轮统一策略结果及清理决定
+
+100/10/1 ns分别由更新平均READ候选、更新平均READ候选、0.829 nm薄细丝候选暖启动。保留完整暖启动及0.65/0.8/1.0/1.5/2.5 nm筛选；每组一次七参数联合优化，最多20次函数评价，实际7/5/5次、ftol终止。归一化RMSE 13.11%/9.23%/6.82%，初始有效直径1.417/2.122/0.829 nm。三组数值对照与宽松趋势均通过；100 ns首READ偏高214.66 μS、生成能垒近上界、SET快速饱和后长平台仍未解决，不能以优化终止证明校准完成。
+
+用户要求outputs仅保留ltp_ltd_hires，故删除旧DC、单周期HiRes输出及全部LTP/LTD历史候选；这是存储范围变更，不代表旧DC/单周期拟合均失败。未删除原始实验数据。把三组实际暖启动参数、初态和热选项独立保存于configs/ltp_ltd_hires.json，旧路径仅保留为来源文字。删除debug_ltp_first.py、validate_ltp_slow.py、simulate_ltp.py及其专属测试，删除fit_ltp.py中的固定初始直径、慢SET和旧多初值动力学搜索分支。保留原器件方程及本轮仍使用的零偏解析冷却。删除已退役输出专属的DC/20 ns字节重放测试，保留通用物理、数据处理和求解器测试，增加当前LTP/LTD连续状态检查。旧单周期批量清单和旧复现报告删除，避免引用已删除输出。
+
+### 删除前的候选目录诊断索引
+
+- 删除 `outputs/dc`。
+- 删除 `outputs/ltp_ltd`。
+- 删除 `outputs/ltp_ltd_1ns_slow_set`。
+  1ns/report.json: {"normalized_rmse": 0.2511739067384626, "convergence_pass": false, "qualitative_target_pass": false, "message": "Both `ftol` and `xtol` termination conditions are satisfied.", "nfev": 10, "bound_hits": []}
+- 删除 `outputs/ltp_ltd_1ns_thin_filament`。
+  1ns/report.json: {"normalized_rmse": 0.0688126321520802, "convergence_pass": true, "qualitative_target_pass": true, "message": "`ftol` termination condition is satisfied.", "nfev": 7, "bound_hits": []}
+- 删除 `outputs/ltp_ltd_first_cycle_debug`。
+- 删除 `outputs/ltp_ltd_fit`。
+  100ns/report.json: {"normalized_rmse": 0.6505629735903009, "convergence_pass": true, "message": "`xtol` termination condition is satisfied.", "nfev": 3}
+  10ns/report.json: {"normalized_rmse": 0.38526822202149974, "convergence_pass": true, "message": "`xtol` termination condition is satisfied.", "nfev": 5}
+  1ns/report.json: {"normalized_rmse": 0.2864858114952253, "convergence_pass": true, "message": "`ftol` termination condition is satisfied.", "nfev": 2}
+- 删除 `outputs/ltp_ltd_fit_multistart`。
+  100ns/report.json: {"normalized_rmse": 0.6505629735903009, "convergence_pass": true, "qualitative_target_pass": false, "message": "`xtol` termination condition is satisfied.", "nfev": 3, "bound_hits": []}
+  10ns/report.json: {"normalized_rmse": 0.4576527451693235, "convergence_pass": true, "qualitative_target_pass": false, "message": "The maximum number of function evaluations is exceeded.", "nfev": 3, "bound_hits": []}
+  1ns/report.json: {"normalized_rmse": 0.2864858114952253, "convergence_pass": true, "qualitative_target_pass": false, "message": "`ftol` termination condition is satisfied.", "nfev": 2, "bound_hits": [0, 1, 3]}
+- 删除 `outputs/ltp_ltd_fixed_10ns`。
+- 删除 `outputs/ltp_ltd_fixed_10ns_g100`。
+- 删除 `outputs/ltp_ltd_individual_g100`。
+- 删除 `outputs/ltp_ltd_mean_read`。
+  100ns/report.json: {"normalized_rmse": 0.2135947554398116, "convergence_pass": true, "qualitative_target_pass": true, "message": "The maximum number of function evaluations is exceeded.", "nfev": 12, "bound_hits": []}
+  10ns/report.json: {"normalized_rmse": 0.14236911515409553, "convergence_pass": true, "qualitative_target_pass": false, "message": "The maximum number of function evaluations is exceeded.", "nfev": 12, "bound_hits": []}
+  1ns/report.json: {"normalized_rmse": 0.2815754304522121, "convergence_pass": true, "qualitative_target_pass": false, "message": "`ftol` termination condition is satisfied.", "nfev": 4, "bound_hits": [0]}
+- 删除 `outputs/ltp_ltd_mean_read_reset_seed`。
+  1ns/report.json: {"normalized_rmse": 0.13646007668705967, "convergence_pass": true, "qualitative_target_pass": false, "message": "The maximum number of function evaluations is exceeded.", "nfev": 12, "bound_hits": [0]}
+- 删除 `outputs/ltp_ltd_mean_read_updated`。
+  100ns/report.json: {"normalized_rmse": 0.14380638952516286, "convergence_pass": true, "qualitative_target_pass": true, "message": "`ftol` termination condition is satisfied.", "nfev": 7, "bound_hits": [0]}
+  10ns/report.json: {"normalized_rmse": 0.11199739594308633, "convergence_pass": true, "qualitative_target_pass": true, "message": "The maximum number of function evaluations is exceeded.", "nfev": 12, "bound_hits": []}
+  1ns/report.json: {"normalized_rmse": 0.14876651138546776, "convergence_pass": true, "qualitative_target_pass": false, "message": "`ftol` termination condition is satisfied.", "nfev": 6, "bound_hits": []}
+- 删除 `outputs/ltp_ltd_read_trend`。
+  100ns/report.json: {"normalized_rmse": 0.6504031525718902, "convergence_pass": true, "qualitative_target_pass": false, "message": "`xtol` termination condition is satisfied.", "nfev": 2, "bound_hits": [0]}
+  10ns/report.json: {"normalized_rmse": 0.385946589873617, "convergence_pass": true, "qualitative_target_pass": true, "message": "`xtol` termination condition is satisfied.", "nfev": 3, "bound_hits": []}
+  1ns/report.json: {"normalized_rmse": 0.28638799602369147, "convergence_pass": true, "qualitative_target_pass": false, "message": "Both `ftol` and `xtol` termination conditions are satisfied.", "nfev": 2, "bound_hits": []}
+- 删除 `outputs/ltp_ltd_read_trend_extended`。
+  100ns/report.json: {"normalized_rmse": 0.18049878927547908, "convergence_pass": true, "qualitative_target_pass": true, "message": "`xtol` termination condition is satisfied.", "nfev": 3, "bound_hits": [1]}
+  10ns/report.json: {"normalized_rmse": 0.3419203697434591, "convergence_pass": true, "qualitative_target_pass": false, "message": "`xtol` termination condition is satisfied.", "nfev": 3, "bound_hits": [0]}
+  1ns/report.json: {"normalized_rmse": 0.28638799801280024, "convergence_pass": true, "qualitative_target_pass": false, "message": "Both `ftol` and `xtol` termination conditions are satisfied.", "nfev": 2, "bound_hits": []}
+- 删除 `outputs/pulse`。
+
+通用单周期fit_pulse入口改为显式提供--reference-parameters、--seed-config或--resume，去除对已删除DC参数与隐式500 ns种子的依赖；批次报告默认写输出目录，不再写已删除清单旁。原始数据未更改。
+
+2026-11-10清理验收：outputs仅ltp_ltd_hires；66项测试通过（移除两项退役基线重放，替换外推连续性测试并新增显式参考参数CLI检查），Ruff静态/格式检查与git diff --check通过。100/10/1 ns原始SHA256与审计一致，三组固定最终参数全序列READ重放差异均为0；未重新优化、未提交Git。
+
+2026-11-10 1.0 V原初态独立探索：仅缩放generation_alpha_m（100/10/1 ns：1.10/0.67/0.77）。1 ns首次全序列收敛对照失败，未放宽阈值，继续减半rtol、atol_m及分段最大步长；每轮判定保存于独立输出summary.json的numerical_checks。不修改接受拟合。
+最终1 ns探索：两次收敛对照失败后，以rtol=2.5e-5、atol_m=2.5e-14 m、最大步长为初始的1/4作为输出，与再减半结果对照通过，最大误差/允许误差=0.2414。闭合脉冲由粗解156变为155，采用细化输出。100/10 ns对照亦通过。69项测试及Ruff静态/格式检查通过。
+
+固定调整后1 ns参数对照：100/10 ns初次收敛通过；1 ns前两轮失败，rtol=2.5e-5与1.25e-5对照通过，保留各轮判定。未放宽验收阈值。
+
+2026-11-10 清理：采纳ltp_ltd_measured_independent，保留ltp_ltd_hires校准来源；删除固定1 ns对照、旧DC/Pulse输出、幅值调整/共享参数专用入口与测试。历史记录仅供追溯，不代表输出仍存在。
+清理验证：67项测试全部通过，Ruff静态/格式检查通过；采纳预测的源数据SHA256、各组参数/初态、输出行数及既有收敛记录核对通过。保留通用DC/Pulse校准和有效测试；无重新拟合。
+
+2026-11-10 用户授权同模型、独立参数重新校准DC及八组Pulse。DC新结果RMSE=53.651 μA，xtol终止；两级固定参数细化已保存。环境切换中断Pulse批次；保留100/200 ns完整结果，六组不完整结果按相同设置重跑。100/200 ns READ偏差未过5%，不以optimizer success替代拟合判据。
+本轮DC/Pulse完成：DC RMSE=53.651 μA，固定参数两级细化已保存；Pulse八组均导出并完成数值细化。READ通过组为1/2/5/10/20/500 ns，100/200 ns失败并拒绝RESET候选；窄脉冲WRITE峰值目标未通过，500 ns SET/RESET峰值幅度偏差约-15.69%/-41.78%；1/2 ns末阶段达到20次评价上限。保留完整终止和接受记录，不放宽阈值。67项测试、Ruff静态/格式检查通过。
+
+2026-11-10 用户更新采纳状态：ltp_ltd_measured_independent改名ltp_ltd_simulate；LTP/LTD 10 ns因实测趋势问题撤回，数据、校准、仿真均删除。DC/Pulse恢复原结果，撤回本日志此前53.651 μA DC及新Pulse批次作为当前结果的结论；此前记录仅供历史追溯。清理相关日志和入口改动，恢复与当前产物对应的采纳清单及重放测试。
+本次整理验证：67项测试通过（含恢复的DC/Pulse固定参数重放），Ruff静态/格式及git diff --check通过。当前DC/Pulse产物、入口、采纳清单与恢复版本一致；100/1 ns LTP审计SHA256、仿真参数来源及两组汇总已核对；比较图仅用保留的逐点结果重建，无重新拟合。

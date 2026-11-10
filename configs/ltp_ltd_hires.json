@@ -1,0 +1,82 @@
+{
+  "100": {
+    "warm_origin": "outputs/ltp_ltd_mean_read_updated/100ns/report.json",
+    "options_origin": "outputs/pulse/100ns_hires/transient_options.json",
+    "parameters": {
+      "thickness_m": 5e-09,
+      "filament_max_m": 5e-09,
+      "seed_diameter_m": 5e-10,
+      "atomic_step_m": 2.5e-10,
+      "attempt_hz": 10000000000000.0,
+      "charge_number": 2.0,
+      "generation_ev": 2.194843392457622,
+      "hopping_ev": 1.2744082192299184,
+      "release_ev": 1.048525482301575,
+      "recombination_ev": 0.7157094597167938,
+      "generation_alpha_m": 6.387957650329998e-10,
+      "hopping_alpha_m": 3.415948117000399e-10,
+      "release_gamma": 0.5222198616076279,
+      "radial_shell_m": 5e-10,
+      "conductivity_s_m": 84850.91224652101,
+      "conduction_ev": 0.040350429676710285,
+      "hopping_density_a_m2": 10541092282226.28,
+      "hopping_length_m": 4e-10,
+      "hopping_voltage_v": 0.2614827975295692,
+      "ambient_k": 300.0,
+      "thermal_k_w": 382733.12374508363,
+      "series_ohm": 40.0,
+      "parallel_ohm": null,
+      "set_polarity": 1,
+      "temperature_limit_k": 3000.0
+    },
+    "initial_state": {
+      "x_m": 8.579826243374685e-10,
+      "w_m": 2.5e-09,
+      "x0_m": 1e-09
+    },
+    "transient_options": {
+      "thermal_time_s": 6.46253816238644e-08,
+      "pad_capacitance_f": 5.235722253368929e-12
+    }
+  },
+  "1": {
+    "warm_origin": "outputs/ltp_ltd_1ns_thin_filament/1ns/report.json",
+    "options_origin": "outputs/pulse/1ns_hires/transient_options.json",
+    "parameters": {
+      "thickness_m": 5e-09,
+      "filament_max_m": 5e-09,
+      "seed_diameter_m": 5e-10,
+      "atomic_step_m": 2.5e-10,
+      "attempt_hz": 10000000000000.0,
+      "charge_number": 2.0,
+      "generation_ev": 2.0025492169438475,
+      "hopping_ev": 0.5372816037072937,
+      "release_ev": 0.6996167957576696,
+      "recombination_ev": 0.5445685564728387,
+      "generation_alpha_m": 6.283917725899955e-10,
+      "hopping_alpha_m": 1.393768082732971e-09,
+      "release_gamma": 0.14612565364847419,
+      "radial_shell_m": 5e-10,
+      "conductivity_s_m": 17615.648201252698,
+      "conduction_ev": 0.0636452971047212,
+      "hopping_density_a_m2": 9627777251770.453,
+      "hopping_length_m": 4e-10,
+      "hopping_voltage_v": 0.27480892896122916,
+      "ambient_k": 300.0,
+      "thermal_k_w": 213294.91335775855,
+      "series_ohm": 40.0,
+      "parallel_ohm": null,
+      "set_polarity": 1,
+      "temperature_limit_k": 3000.0
+    },
+    "initial_state": {
+      "x_m": 5.737633834705859e-10,
+      "w_m": 8.289614431918466e-10,
+      "x0_m": 1e-09
+    },
+    "transient_options": {
+      "thermal_time_s": 2.485963726374053e-10,
+      "pad_capacitance_f": 5.295542365782425e-12
+    }
+  }
+}

@@ -244,6 +244,7 @@ class TransientResult:
     capacitive_a: list[float]
     total_a: list[float]
     accepted_steps: int
+    interval_peak_temperature_k: list[float]
 
 
 def conductivity(temperature_k: float, p: Parameters) -> float:
@@ -824,11 +825,16 @@ def simulate_transient(
         return equilibrium + (old - equilibrium) * math.exp(-h / opts.thermal_time_s)
 
     points, states = [point(vs[0], state, temperature)], [state]
+    peaks = []
     accepted = attempts = 0
     next_h = max_step_s
     for k in range(1, len(ts)):
         duration = ts[k] - ts[k - 1]
+        peak = temperature
         local = 0.0
+        if vs[k - 1] == 0 and vs[k] == 0:
+            temperature = thermal(temperature, 0.0, duration)
+            local = duration
         while local < duration:
             attempts += 1
             if attempts > max_steps:
@@ -876,6 +882,7 @@ def simulate_transient(
                 )
             if error <= 1:
                 state, temperature = corrected, temp_correct
+                peak = max(peak, temperature)
                 local = min(duration, local + h)
                 if duration - local < max(duration * 1e-13, math.ulp(duration)):
                     local = duration
@@ -887,6 +894,7 @@ def simulate_transient(
         temperature = output.temperature_k
         if temperature > p.temperature_limit_k:
             raise ModelError("瞬态温度超过保护上限")
+        peaks.append(max(peak, temperature))
         points.append(output)
         states.append(state)
     slopes = np.gradient(np.asarray(vs), np.asarray(ts))
@@ -898,4 +906,5 @@ def simulate_transient(
         cap,
         [op.current_a + ic for op, ic in zip(points, cap, strict=True)],
         accepted,
+        peaks,
     )
